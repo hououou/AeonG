@@ -16,8 +16,8 @@ queries with efficient capability and data consistent guarantee.
 - ACID compliance
 
 ## Code & benchmark
-- all major codes are avaiable in /src.
-- all datasets and benchmark are avaiable in /benchmark
+- all major codes are available in /src.
+- all datasets and benchmark are available in /benchmark
 
 
 ## Documentation
