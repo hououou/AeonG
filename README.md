@@ -22,5 +22,5 @@ queries with efficient capability and data consistent guarantee.
 
 ## Documentation
 
-TGDB is extended based on Memgraph. The internal information on Memgraph's architecture is available at
+AeonG is extended based on Memgraph. The internal information on Memgraph's architecture is available at
 [internal](https://memgraph.notion.site/Memgraph-Internals-12b69132d67a417898972927d6870bd2) docs.
