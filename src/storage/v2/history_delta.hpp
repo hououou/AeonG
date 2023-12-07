@@ -22,7 +22,7 @@
 
 namespace history_delta {
 
-//hjm begin 结构体信息
+//结构体信息
 struct historyContext{
   std::map<uint64_t,std::vector<nlohmann::json>> fiter_history_datas_;//kv store中筛选的历史数据
   std::map<uint64_t,nlohmann::json> fiter_history_delete;//kv store中筛选的被删除的节点信息
@@ -41,9 +41,11 @@ struct historyContextOnce{
 
 class History_delta final {
  public:
+
    explicit History_delta(const std::string &storage_directory);
 
-  //  History_delta();
+   explicit History_delta(const std::string &storage_directory,bool realTimeFlag);
+
 
   /**
    * Gets a history delta from the storage.
@@ -74,10 +76,6 @@ class History_delta final {
   std::tuple<std::map<int,nlohmann::json>,std::map<int,std::vector<nlohmann::json>>,std::map<int,std::vector<nlohmann::json>>> GetAllDeltas2(uint64_t c_ts,uint64_t c_te,std::string type,std::string filter_type);
   
   std::pair<std::map<int,nlohmann::json>,std::map<int,std::vector<nlohmann::json>>> GetAllDeltas3(uint64_t c_ts,uint64_t c_te,std::string type,std::string prefix);
-
-  // std::pair<std::map<uint64_t,nlohmann::json>,std::map<uint64_t,std::vector<nlohmann::json>>> GetAllVertexDeltas(uint64_t c_ts,uint64_t c_te,std::string type);
-  // std::map<uint64_t,std::vector<nlohmann::json>> GetDeleteEdgeDeltas(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t v_gid);
-  
   std::pair<std::map<std::string,nlohmann::json>,std::map<int,std::vector<nlohmann::json>>> GetAllEdgeDeltas(uint64_t c_ts,uint64_t c_te,std::string type);
   std::pair<std::vector<nlohmann::json>,bool> GetVertexInfo(storage::Gid gid,uint64_t c_ts,uint64_t c_te,std::string type);
   std::pair<std::vector<nlohmann::json>,bool> GetEdgeInfo(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t gid);
@@ -85,7 +83,6 @@ class History_delta final {
   std::vector<nlohmann::json> GetDeleteEdgeInfo(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t gid);
   
   std::pair<bool,std::vector<int>> getDeadInfo(storage::Delta* vertex_deltas,uint64_t c_ts,uint64_t c_te,std::string types_,bool is_vertex);
-  
   std::pair<std::vector<nlohmann::json>,bool> GetEdgeInfo2(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t gid);
   
   void GetTimeTableAll();
@@ -119,20 +116,21 @@ class History_delta final {
 
   std::string getPrefix(storage::Gid gid,const uint64_t start,bool vertex);
 
+  bool RemoveOldHistory(const std::chrono::milliseconds &retention_period);
+
  private:
+  bool realTimeFlagConstant=false;
   //hash index 用来存储object的min_ts max_te
   std::map<uint64_t,std::pair<uint64_t,uint64_t>> vertex_time_table_;//存储顶点的id，历史开始时间，历史结束时间
   std::map<uint64_t,std::pair<uint64_t,uint64_t>> edge_time_table_;//存储边的id，历史开始时间，历史结束时间
   //hash index 只存储当前事务
-  std::map<uint64_t,std::pair<uint64_t,uint64_t>> vertex_time_tmp_;//存储顶点的id，历史开始时间，历史结束时间
+  std::map<uint64_t,uint64_t> vertex_time_tmp_;
   std::map<uint64_t,std::pair<uint64_t,uint64_t>> edge_time_tmp_;//存储边的id，历史开始时间，历史结束时间
-  //gid,delta-num: <json>
   std::map<uint64_t,std::pair<int,nlohmann::json>> vertex_anchor_;
   std::list<std::map<std::string, std::string>> edge_anchor_;
 
   kvstore::KVStore storage_;
-  // std::map<uint64_t,uint64_t> before_gid_commit_;
-  std::map<std::tuple<std::string,uint64_t,uint64_t>, nlohmann::json> gid_delta_delta_;//prefix,gid,commit_te
+  std::map<std::tuple<std::string,uint64_t,uint64_t>, nlohmann::json> gid_delta_delta_;
   std::map<std::string, nlohmann::json> gid_delta_;//save the same actions of one transaction
 };
 }  // namespace auth
