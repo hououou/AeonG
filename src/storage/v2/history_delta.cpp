@@ -15,6 +15,8 @@
 #include <fstream>
 #include <fmt/format.h>
 
+#include <stdlib.h>
+
 #include "auth/exceptions.hpp"
 #include "utils/flag_validation.hpp"
 #include "utils/license.hpp"
@@ -134,49 +136,56 @@ int64_t swap64(const int64_t &v)
     | ((v & 0x000000000000ff00) << 40)
     | (v << 56);
 }
-std::string uint_convert_to_string(const int64_t time){
-  auto size=sizeof(time);
-  char *buffer = (char *)std::malloc(size);
-  auto test=swap64(time);
-  std::memcpy(buffer, &test, size);
-  std::string start_str(buffer,size);
-  std::free(buffer);
-  return start_str;
-  // return std::to_string(time);
+std::string uint_convert_to_string(const int64_t time,bool realTimeFlagConstant){
+   if(false){//realTimeFlagConstant
+    if(time>0){
+      return std::to_string(std::numeric_limits<uint64_t>::max()-time);
+    }else{
+      return std::to_string(-std::numeric_limits<uint64_t>::max()+time);
+    }
+  }else{
+    auto size=sizeof(time);
+    char *buffer = (char *)std::malloc(size);
+    auto test=swap64(time);
+    std::memcpy(buffer, &test, size);
+    std::string start_str(buffer,size);
+    std::free(buffer);
+    return start_str;
+  }
 }
 
-// return std::to_string(time);
 
-std::tuple<uint64_t,int,int> string_convert_to_uint(std::string res){
+std::tuple<uint64_t,int64_t,int64_t> string_convert_to_uint(std::string res,bool realTimeFlagConstant){
   auto size=sizeof(int64_t);
-  auto length=res.length();
-  //获取gid
-  size_t pos = res.find(":");
-  auto get_size=length-2*size-3-pos;
-  auto gid_str=res.substr(pos+1,get_size);//3:4 12 20-2*8
-  auto gid=(uint64_t)std::stoi(gid_str);
-  //处理时间
-  auto redo_str1=res.substr(length-size);//12:
-  auto redo_str2=res.substr(length-2*size-1,size);//3:12
-  char redo[size];
-  char redo2[size];
-  for(int i=0;i<size;i++){
-    redo[i]=redo_str1[i];
-    redo2[i]=redo_str2[i];
+
+  if(false){//realTimeFlagConstant
+    auto split_info=splits(res,":");
+    auto gid=(uint64_t)std::stoi(split_info[1]);
+    auto ts=-(std::numeric_limits<uint64_t>::max()+std::stoll(split_info[2]));
+    auto te=-(std::numeric_limits<uint64_t>::max()+std::stoll(split_info[3]));
+    return std::make_tuple(gid,ts,te);
+  }else{
+    auto length=res.length();
+    //获取gid
+    size_t pos = res.find(":");
+    auto get_size=length-2*size-3-pos;
+    auto gid_str=res.substr(pos+1,get_size);
+    auto gid=(uint64_t)std::stoi(gid_str);
+    //处理时间
+    auto redo_str1=res.substr(length-size);
+    auto redo_str2=res.substr(length-2*size-1,size);
+    char redo[size];
+    char redo2[size];
+    for(int i=0;i<size;i++){
+      redo[i]=redo_str1[i];
+      redo2[i]=redo_str2[i];
+    }
+    auto ts = *(int64_t*) redo2;// redo_str;
+    auto te = *(int64_t*) redo;
+    ts=swap64(ts);
+    te=swap64(te);
+    return std::make_tuple(gid,ts,te);
   }
-  // auto ts = *(int*) redo2;// redo_str;
-  // auto te = *(int*) redo;
-  auto ts = *(int64_t*) redo2;// redo_str;
-  auto te = *(int64_t*) redo;
-  ts=swap64(ts);
-  te=swap64(te);
-  // std::cout<<ts<<" "<<te<<"\n";
-  // std::cout<<htonl(ts)<<" "<<htonl(te)<<"\n";
-  // auto split_info=splits(res,":");
-  // auto gid=(uint64_t)std::stoi(split_info[1]);
-  // auto ts=std::stoi(split_info[2]);
-  // auto te=std::stoi(split_info[3]);
-  return std::make_tuple(gid,ts,te);
 }
 
 /**
@@ -347,24 +356,6 @@ std::pair<bool,std::pair<std::vector<int>,std::vector<nlohmann::json>>> getHisto
     if(fiter_history_datas_.find(object_gid)!=fiter_history_datas_.end()){
       gid_history_deltas_=fiter_history_datas_[object_gid];
     }
-    // if(current_vertex_){//节点，直接获取gid      
-    //   if(fiter_history_datas_.find(vertex_gid)!=fiter_history_datas_.end()){
-    //     gid_history_deltas_=fiter_history_datas_[vertex_gid];
-    //   }
-    // }else{//边
-    //   if(fiter_history_datas_.find(vertex_gid)!=fiter_history_datas_.end()){
-    //     auto vertex_history_info=fiter_history_datas_[vertex_gid];
-    //     for(auto tmp:vertex_history_info){// "0":json "1":json
-    //       auto edge_str=std::to_string(edge_gid);
-    //       if( tmp.find(edge_str)!= tmp.end()){
-    //         auto edge_data= tmp[edge_str];
-    //         edge_data["TT_TS"]=tmp["TT_TS"];
-    //         edge_data["TT_TE"]=tmp["TT_TE"];
-    //         gid_history_deltas_.emplace_back(edge_data);
-    //       }
-    //     }
-    //   }
-    // }
   }
   if(!gid_history_deltas_.empty()) get_history_flag=true;
   return std::make_pair(get_history_flag,std::make_pair(dead_deltas,gid_history_deltas_));
@@ -428,8 +419,10 @@ std::pair<std::vector<nlohmann::json>,bool> GetEdgeInfo2(const std::string &stor
  */
 
 History_delta::History_delta(const std::string &storage_directory) : storage_(storage_directory) {
-  // graph_operations=0;
-}//"/home/hjm/memgraph/build/history_deltas"
+}
+History_delta::History_delta(const std::string &storage_directory,bool realTimeFlag) : storage_(storage_directory) {
+  realTimeFlagConstant=realTimeFlag;
+}
 
 
 void History_delta::GetAll() const {
@@ -1309,4 +1302,30 @@ std::string History_delta::getPrefix(storage::Gid gid,const uint64_t start,bool 
 }
 bool History_delta::HasDeltas() const { return storage_.begin(kDeltaPrefix) != storage_.end(kDeltaPrefix); }
 
+bool History_delta::RemoveOldHistory(const std::chrono::milliseconds &retention_period) {
+  //TODO find old history and delete them
+  auto now_time = std::chrono::system_clock::now();
+  auto now_time_milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now_time.time_since_epoch()).count();
+  int64_t clean_timestamp = now_time_milliseconds-retention_period.count() ;
+  std::cout<<"remove history here:"<<clean_timestamp<<"\n";
+  std::vector<std::string> delete_keys;
+  int i=0;
+  for (auto it = storage_.begin(); it != storage_.end(); ++it) {
+    auto [gid,ts,te]=string_convert_to_uint(it->first,realTimeFlagConstant);
+    te=te>0?te:-te;
+    if(te<=clean_timestamp){
+      delete_keys.push_back(it->first);
+    }
+    i+=1;
+    if(i<5){
+      std::cout<<"ts:"<<ts<<" te:"<<te<<" "<<it->second<<"\n";
+    }
+  }
+  if (!storage_.DeleteMultiple(delete_keys)) {
+    std::cout<<"Couldn't Remove Old History!\n";
+  }else{
+    std::cout<<"clean "<<i<<" history delata\n";
+  }
+  return true;
+}
 }  // namespace history_delta

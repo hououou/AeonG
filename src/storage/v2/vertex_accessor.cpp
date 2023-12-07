@@ -21,6 +21,7 @@
 #include "utils/logging.hpp"
 #include "utils/memory_tracker.hpp"
 
+#include <string>
 namespace storage {
 
 namespace detail {
@@ -59,6 +60,21 @@ std::pair<bool, bool> IsVisible(Vertex *vertex, Transaction *transaction, View v
 }
 }  // namespace
 }  // namespace detail
+
+namespace help {
+namespace {
+  int FindPosition(const std::vector<int>& NumLists, int number) {
+    for (int i = 0; i < NumLists.size(); ++i) {
+        if (number <= NumLists[i]) {
+            // int pos = i!=0 ? i - 1 : i;
+            return i ;
+        }
+    }
+    return NumLists.size() - 1;
+  }
+}  // namespace
+}  // namespace help
+
 
 //hjm begin
 std::optional<VertexAccessor> VertexAccessor::Creates(Vertex *vertex, Transaction *transaction, Indices *indices,
@@ -131,16 +147,20 @@ Result<bool> VertexAccessor::AddLabel(LabelId label) {
         return Error::SERIALIZATION_ERROR;
       }
     }else{//前一个delta提交了 全量提交
-      // std::cout<<"edge commit:"<<ts<<" "<<edge_.ptr->num<<"\n";
       vertex_->num+=1;
-      if(vertex_->num>config_.AnchorNum){
-        vertex_->num=1;
-        // save edge to restore properties
-        if(AnchorFlag){
-          auto maybe_labels = vertex_->labels;
-          auto maybe_properties = vertex_->properties.Properties();
-          transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
+      if(!MultipleAnchorFlag){//constant anchor num
+        if(vertex_->num>config_.AnchorNum){
+          vertex_->num=1;
+          // save edge to restore properties
+          if(AnchorFlag){
+            auto maybe_labels = vertex_->labels;
+            auto maybe_properties = vertex_->properties.Properties();
+            ts = before_delta->commit_timestamp;
+            transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
+          }
         }
+      }else{
+
       }
       printf=true;
     }
@@ -215,6 +235,7 @@ Result<bool> VertexAccessor::RemoveLabel(LabelId label) {
         if(AnchorFlag){
           auto maybe_labels = vertex_->labels;
           auto maybe_properties = vertex_->properties.Properties();
+          ts = before_delta->commit_timestamp;
           transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
         }
       }
@@ -247,7 +268,7 @@ Result<bool> VertexAccessor::RemoveLabel(LabelId label) {
   // vertex_->vertex_changed=true;
   // vertex_->transaction_st=transaction_->transaction_id;
   transaction_->v_changed.insert(vertex_->gid);
-  delta->transaction_st = ts;
+  delta->transaction_st = ts!=0? ts: vertex_->transaction_st;
   //hjm end
 
   std::swap(*it, *vertex_->labels.rbegin());
@@ -388,14 +409,28 @@ Result<PropertyValue> VertexAccessor::SetProperty(PropertyId property, const Pro
         return Error::SERIALIZATION_ERROR;
       }
     }else{//前一个delta提交了 全量提交
-      // std::cout<<"edge commit:"<<ts<<" "<<edge_.ptr->num<<"\n";
-      vertex_->num+=1;
-      if(vertex_->num>config_.AnchorNum){
-        vertex_->num=1;
-        // save edge to restore properties
-        if(AnchorFlag){
+      if(!MultipleAnchorFlag){//constant anchor num
+        if(vertex_->num>config_.AnchorNum){
+          vertex_->num=1;
+          // save edge to restore properties
+          if(AnchorFlag){
+            auto maybe_labels = vertex_->labels;
+            auto maybe_properties = vertex_->properties.Properties();
+            ts = before_delta->commit_timestamp;
+            transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
+          }
+        }
+      }else{//multiple anchor nums
+        auto position=help::FindPosition(HotNumLists,vertex_->num);
+        auto self_anchor=AnchorNumLists[position];
+        std::cout<<"num:"<<vertex_->num<<"\n";
+        std::cout<<"position:"<<position<<" self_anchor:"<<self_anchor<<"\n";
+        if((vertex_->num)%(self_anchor+1)==0 && AnchorFlag){
+          std::cout<<"create anchor here\n";
+          std::cout<<"gid:"<<std::to_string(vertex_->gid.AsUint())<<" ts:"<<std::to_string(ts)<<"\n";
           auto maybe_labels = vertex_->labels;
           auto maybe_properties = vertex_->properties.Properties();
+          ts = before_delta->commit_timestamp;
           transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
         }
       }
@@ -419,22 +454,10 @@ Result<PropertyValue> VertexAccessor::SetProperty(PropertyId property, const Pro
   // transactions get a SERIALIZATION_ERROR.
   auto delta=CreateAndLinkDelta(transaction_, vertex_, Delta::SetPropertyTag(), property, current_value);
   vertex_->properties.SetProperty(property, value);
+  vertex_->num+=1;
 
-  //hjm begin
-  // delta->commit_timestamp=transaction_->transaction_id;
-  // auto older = delta->next.load(std::memory_order_acquire);
-  // auto tt=vertex_->transaction_st;
-  // if (older != nullptr){
-  //   if(tt==transaction_->transaction_id) tt=older->transaction_st;
-  // }
-  // delta->transaction_st =tt;
-  // // std::cout<<"delta info:"<<tt<<" "<<delta->commit_timestamp<<"\n";
-  // // vertex_->transaction_st=transaction_->transaction_id;
-  // vertex_->vertex_changed=true;
-  // vertex_->transaction_st=transaction_->transaction_id;
   transaction_->v_changed.insert(vertex_->gid);
-  delta->transaction_st = ts;
-  //hjm end
+  delta->transaction_st = vertex_->transaction_st;
   UpdateOnSetProperty(indices_, property, value, vertex_, *transaction_);
 
   return std::move(current_value);
@@ -483,6 +506,7 @@ Result<std::map<PropertyId, PropertyValue>> VertexAccessor::ClearProperties() {
         if(AnchorFlag){
           auto maybe_labels = vertex_->labels;
           auto maybe_properties = vertex_->properties.Properties();
+          ts = before_delta->commit_timestamp;
           transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
         }
       }

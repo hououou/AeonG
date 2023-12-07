@@ -502,6 +502,10 @@ Storage::Storage(Config config)
           "those files into a .backup directory inside the storage directory.");
     }
   }
+  //rocksdb retention
+  if (config_.rocksdb_retention.retention_on_startup){
+    reclaim_rocksdb_runner_.Run("Rocksdb GC", config_.rocksdb_retention.retention_interval, [this] { this->ReclaimHistoryRentention(config_.rocksdb_retention.retention_period); });
+  }
   if (config_.durability.snapshot_wal_mode != Config::Durability::SnapshotWalMode::DISABLED) {
     snapshot_runner_.Run("Snapshot", config_.durability.snapshot_interval, [this] {
       if (auto maybe_error = this->CreateSnapshot(); maybe_error.HasError()) {
@@ -582,7 +586,10 @@ Storage::Accessor::~Accessor() {
   FinalizeTransaction();
 }
 // hjm begin
-
+//rocksdb 回收old history
+bool Storage::ReclaimHistoryRentention(const std::chrono::milliseconds &retention_period){
+  return saved_history_deltas_->RemoveOldHistory(retention_period);
+}
 //根据kv文件创建历史边
 EdgeAccessor Storage::Accessor::CreateHistoryEdge(const EdgeAccessor&another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
   Delta *delta = nullptr;
@@ -619,7 +626,7 @@ EdgeAccessor Storage::Accessor::CreateHistoryEdge(const EdgeAccessor&another,nlo
   edge_it->properties.SetProperty(property_id2,property_value2);
 
   edge_it->transaction_st=gid_delta_["TT_TS"].get<uint64_t>();
-  edge_it->tt_te=gid_delta_["TT_TE"].get<uint64_t>();
+  // edge_it->tt_te=gid_delta_["TT_TE"].get<uint64_t>();
 
   auto edge= EdgeRef(&*edge_it);
 
@@ -661,7 +668,7 @@ EdgeAccessor Storage::Accessor::CreateHistoryEdge2(const EdgeAccessor &another,i
   edge_it->properties.SetProperty(property_id2,property_value2);
 
   edge_it->transaction_st=deltas->transaction_st;
-  edge_it->tt_te=deltas->commit_timestamp;
+  // edge_it->tt_te=deltas->commit_timestamp;
 
   auto edge= EdgeRef(&*edge_it);
   return EdgeAccessor(edge, another.edge_type_, another.from_vertex_, another.to_vertex_, another.transaction_, &storage_->indices_,&storage_->constraints_, another.config_);
@@ -724,7 +731,7 @@ VertexAccessor Storage::Accessor::CreateHistoryVertex(const VertexAccessor &anot
   vertex->properties.SetProperty(property_id2,property_value2);
   
   vertex->transaction_st=gid_delta_["TT_TS"].get<uint64_t>();
-  vertex->tt_te=gid_delta_["TT_TE"].get<uint64_t>();
+  // vertex->tt_te=gid_delta_["TT_TE"].get<uint64_t>();
   //TODO edges
   
   return VertexAccessor{vertex, another.transaction_, another.indices_, another.constraints_, another.config_};
@@ -883,6 +890,7 @@ storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromKV(const storag
   auto maybe_properties=vertex_.properties;
 
   //deleted info
+  
   //properties 
   if(gid_delta_.find("SP")!=gid_delta_.end()){
     auto history_props_=gid_delta_["SP"];
@@ -2712,6 +2720,88 @@ utils::BasicResult<ConstraintViolation, void> Storage::Accessor::Commit(
       return *unique_constraint_violation;
     }
   }
+
+   //transactionid->commit_time
+  auto time_flag=config_.realTimeFlag;
+
+  if(!time_flag){
+    for (auto &delta : transaction_.deltas) {
+      auto commit_timestamp = transaction_.commit_timestamp->load(std::memory_order_acquire);
+      if(delta.transaction_st==0 ){
+        delta.transaction_st=commit_timestamp+1;
+      }
+      delta.commit_timestamp=commit_timestamp;
+      auto prev = delta.prev.Get();
+      switch (prev.type) {
+        case storage::PreviousPtr::Type::VERTEX: {
+          storage::Vertex *vertex = prev.vertex;
+          if(vertex->deleted){
+            storage_->hjm_deleted_vertices_.emplace_back(vertex->gid.AsUint());
+            storage_->hjm_deleted_vertices.emplace_back(vertex);
+            my_deleted_vertices.push_back(vertex->gid);
+          }else{
+            auto gid=vertex->gid;
+            if(transaction_.v_changed.count(gid)){
+              vertex->transaction_st=*commit_timestamp_;
+            }
+            if(transaction_.ve_changed.count(gid))vertex->ve_tt_ts=*commit_timestamp_;
+          }
+          break;
+        }
+        case storage::PreviousPtr::Type::EDGE: {
+          storage::Edge *edge = prev.edge;
+          edge->transaction_st=*commit_timestamp_;
+          if(edge->deleted)  my_deleted_edges.push_back(edge->gid);
+          break;
+        }
+        case storage::PreviousPtr::Type::DELTA: {
+          break;
+        }
+        case storage::PreviousPtr::Type::NULLPTR: {
+        }
+      }
+    }
+  }else{//set realtime
+    auto now_time = std::chrono::system_clock::now();
+    auto real_commit_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now_time.time_since_epoch()).count();
+    for (auto &delta : transaction_.deltas) {
+      if(delta.transaction_st==0 ){
+        delta.transaction_st=real_commit_timestamp;
+      }
+      delta.commit_timestamp=real_commit_timestamp;
+      auto prev = delta.prev.Get();
+      switch (prev.type) {
+        case storage::PreviousPtr::Type::VERTEX: {
+          storage::Vertex *vertex = prev.vertex;
+          if(vertex->deleted){
+            storage_->hjm_deleted_vertices_.emplace_back(vertex->gid.AsUint());
+            storage_->hjm_deleted_vertices.emplace_back(vertex);
+            my_deleted_vertices.push_back(vertex->gid);
+          }else{
+            auto gid=vertex->gid;
+            if(transaction_.v_changed.count(gid)){
+              vertex->transaction_st=real_commit_timestamp;
+            }
+            if(transaction_.ve_changed.count(gid))vertex->ve_tt_ts=real_commit_timestamp;
+          }
+          break;
+        }
+        case storage::PreviousPtr::Type::EDGE: {
+          storage::Edge *edge = prev.edge;
+          edge->transaction_st=real_commit_timestamp;
+          if(edge->deleted)  my_deleted_edges.push_back(edge->gid);
+          break;
+        }
+        case storage::PreviousPtr::Type::DELTA: {
+          break;
+        }
+        case storage::PreviousPtr::Type::NULLPTR: {
+        }
+      }
+    }
+
+  }
+
 
   {
     for (auto &delta : transaction_.deltas) {

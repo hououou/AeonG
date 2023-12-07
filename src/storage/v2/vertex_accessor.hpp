@@ -90,6 +90,7 @@ class VertexAccessor final {
   bool haslabels();
   void propsizes();
   Delta *getDeltas();
+  std::map<PropertyId, PropertyValue> getProperties(){return vertex_->properties.Properties();}
   uint64_t transaction_st() const noexcept{return vertex_->transaction_st;}//transaction_st;}
   // wzy edit 0512
   // uint64_t tt_te(){return vertex_->tt_te;}

@@ -32,6 +32,7 @@ struct Config {
   struct Items {
     bool properties_on_edges{true};
     int AnchorNum {11};
+    bool realTimeFlag{false};
   } items;
 
   struct Durability {
@@ -57,6 +58,13 @@ struct Config {
     IsolationLevel isolation_level{IsolationLevel::SNAPSHOT_ISOLATION};
     // const int NUM{11};
   } transaction;
+
+  struct RocksDB_retention {
+    bool retention_on_startup{false};//是否启动
+    std::chrono::milliseconds retention_interval{std::chrono::minutes(1)};//异步清理的时间间隔
+    std::chrono::milliseconds retention_period{std::chrono::minutes(1)};//清理多久以前的数据
+    // const int NUM{11};
+  } rocksdb_retention;
 
 };
 

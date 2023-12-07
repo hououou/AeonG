@@ -158,6 +158,17 @@ DEFINE_VALIDATED_int32(anchor_num, 11,
                        "Anchor num",
                        FLAG_IN_RANGE(0, std::numeric_limits<uint16_t>::max()));
 
+                       
+//TODO: extend features 
+DEFINE_bool(real_time_flag, false, "Controls whether the historical storage reclaim old history on stratup.");
+DEFINE_bool(retention_on_startup, false, "Controls whether the historical storage reclaim old history on stratup.");
+DEFINE_VALIDATED_uint64(retention_interval_sec, 60,
+                        "Reclaim history interval (in seconds). Set "
+                        "to 0 to disable reclaiming history from historical storage.",
+                        FLAG_IN_RANGE(0, 7 * 24 * 3600));
+DEFINE_VALIDATED_uint64(retention_period_sec, 15,
+                        "Reclaim history interval (in seconds). ",
+                        FLAG_IN_RANGE(0, 7 * 24 * 3600));
 
 // General purpose flags.
 // NOTE: The `data_directory` flag must be the same here and in
@@ -1133,14 +1144,18 @@ int main(int argc, char **argv) {
   storage::Config db_config{
       .gc = {.type = storage::Config::Gc::Type::PERIODIC, .interval = std::chrono::seconds(FLAGS_storage_gc_cycle_sec)},
       .items = {.properties_on_edges = FLAGS_storage_properties_on_edges,
-                .AnchorNum=FLAGS_anchor_num},
+                .AnchorNum=FLAGS_anchor_num,
+                .realTimeFlag=FLAGS_real_time_flag},
       .durability = {.storage_directory = FLAGS_data_directory,
                      .recover_on_startup = FLAGS_storage_recover_on_startup,
                      .snapshot_retention_count = FLAGS_storage_snapshot_retention_count,
                      .wal_file_size_kibibytes = FLAGS_storage_wal_file_size_kib,
                      .wal_file_flush_every_n_tx = FLAGS_storage_wal_file_flush_every_n_tx,
                      .snapshot_on_exit = FLAGS_storage_snapshot_on_exit},
-      .transaction = {.isolation_level = ParseIsolationLevel()}};
+      .transaction = {.isolation_level = ParseIsolationLevel()},
+      .rocksdb_retention = {.retention_on_startup = FLAGS_retention_on_startup,
+                            .retention_period=std::chrono::seconds(FLAGS_retention_period_sec),
+                            .retention_interval=std::chrono::seconds(FLAGS_retention_interval_sec)}};
   if (FLAGS_storage_snapshot_interval_sec == 0) {
     if (FLAGS_storage_wal_enabled) {
       LOG_FATAL(

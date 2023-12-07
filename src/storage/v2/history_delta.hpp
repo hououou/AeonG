@@ -42,6 +42,7 @@ struct historyContextOnce{
 class History_delta final {
  public:
    explicit History_delta(const std::string &storage_directory);
+   explicit History_delta(const std::string &storage_directory,bool realTimeFlag);
 
   //  History_delta();
 
@@ -118,8 +119,10 @@ class History_delta final {
   bool HasDeltas() const;
 
   std::string getPrefix(storage::Gid gid,const uint64_t start,bool vertex);
+  bool RemoveOldHistory(const std::chrono::milliseconds &retention_period);
 
  private:
+  bool realTimeFlagConstant=false;
   //hash index 用来存储object的min_ts max_te
   std::map<uint64_t,std::pair<uint64_t,uint64_t>> vertex_time_table_;//存储顶点的id，历史开始时间，历史结束时间
   std::map<uint64_t,std::pair<uint64_t,uint64_t>> edge_time_table_;//存储边的id，历史开始时间，历史结束时间

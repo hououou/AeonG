@@ -30,6 +30,9 @@ namespace storage {
 const uint64_t kTimestampInitialId = 0;
 const uint64_t kTransactionInitialId = 1ULL << 63U;
 // const int NUM=11;
+const std::vector<int> AnchorNumLists{10,100,1000};
+const std::vector<int> HotNumLists{1000,10000,100000};
+const bool MultipleAnchorFlag=true;
 const bool AnchorFlag=true;
 const bool prinfFlag=false;//true
 

@@ -244,6 +244,7 @@ class Storage final {
     storage::HistoryVertex CreateHistoryVertexFromKV(const storage::HistoryVertex ,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
     storage::HistoryVertex CreateHistoryVertexFromKV(const VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
     storage::HistoryVertex CreateHistoryVertexFromDelta(const VertexAccessor &another,int index,history_delta::historyContext& historyContext_);
+    storage::HistoryVertex CreateHistoryVertexFromDelta(const VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & may_props,history_delta::historyContext& historyContext_);
     storage::HistoryVertex CreateAnchorVertex(uint64_t gid,nlohmann::json gid_delta_,std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> in_edges,std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> out_edges);
     
     storage::HistoryEdge CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another);
@@ -590,7 +591,7 @@ class Storage final {
   enum class CreateSnapshotError : uint8_t { DisabledForReplica };
 
   utils::BasicResult<CreateSnapshotError> CreateSnapshot();
-
+  bool ReclaimHistoryRentention(const std::chrono::milliseconds &retention_period);
  private:
   Transaction CreateTransaction(IsolationLevel isolation_level);
 
@@ -702,6 +703,7 @@ class Storage final {
 
   utils::Scheduler snapshot_runner_;
   utils::SpinLock snapshot_lock_;
+  utils::Scheduler reclaim_rocksdb_runner_;
 
   // UUID used to distinguish snapshots and to link snapshots to WALs
   std::string uuid_;
