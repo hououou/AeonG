@@ -168,6 +168,119 @@ class LDBC():
             query=query_state
         return  query
     
+    ####### add query ##########
+    def query_add_person():
+        self._id_to_be = self._id_to_be + 1
+        tgql_query=""
+        query=""
+        with open(path) as f1:
+            reader = csv.reader(f1, delimiter='|')
+            line_id=random(1,len(reader))
+            row=reader[line_id]
+            head=reader[0]
+            # tgdb
+            query=f"CREATE (p:Person {{id: {self._id_to_be}},firstName:'{fn}',lastName:'{ln}',gender:'{gd}',birthday:{bd},creationDate:{cd},locationIP:'{ip}',browserUsed:'{bu}'});"
+            # tgql
+            node_id=f"Person{self._id_to_be}"
+            node_info=f"Create (n:Object {{ title:'{node_type}',id:'{node_id}',validTimeStart:timestamp(),validTimeEnd:9223372036854775000 }})"
+            #create id
+            query_state=f" Create (n)-[:OBJECT_ATTRIBUTE]->(a:Attribute {{title:'id',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "+\
+                        f" Create (a)-[:ATTRIBUTE_VALUE]->(v:Value {{title:{self._id_to_be},validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})"
+            att_infos=" "
+            for j in range(0,len(row)):
+                attribute_name=head[j]
+                attribute_value=row[j]
+                if(attribute_name=="id"):
+                    continue
+                if(attribute_value==""):
+                    continue
+                attribute_index="a"+str(j)
+                attribute_info=f" Create (n)-[:OBJECT_ATTRIBUTE]->({attribute_index}:Attribute {{title:\"{attribute_name}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+                value_info=f" Create ({attribute_index})-[:ATTRIBUTE_VALUE]->(:Value {{title:\"{attribute_value}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+                att_infos=att_infos+attribute_info+value_info           
+            tgql_query=node_info+query_state+att_infos
+        return query,tgql_query
+
+    def query_add_comment():
+        self._id_to_be = self._id_to_be + 1
+        tgql_query=""
+        query=""
+        with open(path) as f1:
+            reader = csv.reader(f1, delimiter='|')
+            line_id=random(1,len(reader))
+            head=reader[0]
+            row=reader[line_id]
+            # tgdb
+            query=f"CREATE (p:Comment {{id: {self._id_to_be}},creationDate:{cd},locationIP:'{ip}',browserUsed:'{bu}',content:'{con}',length:'{l}'});"
+            # tgql
+            node_id=f"Comment{self._id_to_be}"
+            node_info=f"Create (n:Object {{ title:'{node_type}',id:'{node_id}',validTimeStart:timestamp(),validTimeEnd:9223372036854775000 }})"
+            #create id
+            query_state=f" Create (n)-[:OBJECT_ATTRIBUTE]->(a:Attribute {{title:'id',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "+\
+                        f" Create (a)-[:ATTRIBUTE_VALUE]->(v:Value {{title:{self._id_to_be},validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})"
+            att_infos=" "
+            for j in range(0,len(row)):
+                attribute_name=head[j]
+                attribute_value=row[j]
+                if(attribute_name=="id"):
+                    continue
+                if(attribute_value==""):
+                    continue
+                attribute_index="a"+str(j)
+                attribute_info=f" Create (n)-[:OBJECT_ATTRIBUTE]->({attribute_index}:Attribute {{title:\"{attribute_name}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+                value_info=f" Create ({attribute_index})-[:ATTRIBUTE_VALUE]->(:Value {{title:\"{attribute_value}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+                att_infos=att_infos+attribute_info+value_info           
+            tgql_query=node_info+query_state+att_infos
+        return query,tgql_query
+
+    def query_add_post():
+        self._id_to_be = self._id_to_be + 1
+        tgql_query=""
+        query=""
+        with open(path) as f1:
+            reader = csv.reader(f1, delimiter='|')
+            line_id=random(1,len(reader))
+            head=reader[0]
+            row=reader[line_id]
+            # tgdb
+            query=f"CREATE (p:Post {{id: {self._id_to_be}},imageFile:'{if}',creationDate:{cd},locationIP:'{ip}',browserUsed:'{bu}',language:'{la}',content:'{con}',length:'{l}'});"
+            # tgql
+            node_id=f"Post{self._id_to_be}"
+            node_info=f"Create (n:Object {{ title:'{node_type}',id:'{node_id}',validTimeStart:timestamp(),validTimeEnd:9223372036854775000 }})"
+            #create id
+            query_state=f" Create (n)-[:OBJECT_ATTRIBUTE]->(a:Attribute {{title:'id',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "+\
+                        f" Create (a)-[:ATTRIBUTE_VALUE]->(v:Value {{title:{self._id_to_be},validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})"
+            att_infos=" "
+            for j in range(0,len(row)):
+                attribute_name=head[j]
+                attribute_value=row[j]
+                if(attribute_name=="id"):
+                    continue
+                if(attribute_value==""):
+                    continue
+                attribute_index="a"+str(j)
+                attribute_info=f" Create (n)-[:OBJECT_ATTRIBUTE]->({attribute_index}:Attribute {{title:\"{attribute_name}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+                value_info=f" Create ({attribute_index})-[:ATTRIBUTE_VALUE]->(:Value {{title:\"{attribute_value}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+                att_infos=att_infos+attribute_info+value_info           
+            tgql_query=node_info+query_state+att_infos
+        return query,tgql_query
+
+    def add_edge(from_node, edge_type, to_node):
+        query=f"MATCH (n1 {{id:{from_node}}}),(n2 {{id:{to_node}}}) with n1, n2 Create (n1)-[:edge_type]-(n2);"
+        tgql_query=f"MATCH (o1:Object)-[o:OBJECT_ATTRIBUTE]-(att {{title:'id'}})-[a:ATTRIBUTE_VALUE]-(v {{title:{from_node}}}),(o2:Object)-[:OBJECT_ATTRIBUTE]-(att2 {{title:'id'}})-[a2:ATTRIBUTE_VALUE]-(v2 {{title:{to_node}}}) with o1, o2 Create (o1)-[:edge_type]-(o2);"
+        return query,tgql_query
+    ######### delete query ############
+    def delete_node(node_label,person_id):
+        query=f"MATCH (p:Person {{id:{person_id}}})-[e]-() delete e, p;"
+        tgql_query1=f"MATCH (p:Object {{id:{node_label}{person_id}}})-[o:OBJECT_ATTRIBUTE]-(att)-[a:ATTRIBUTE_VALUE]-(v) delete o,a,att,v;"
+        tgql_query2=f"MATCH (p:Object {{id:{node_label}{person_id}}})-[e]-() delete e;"
+        return query, tgql_query1,tgql_query2
+
+    def delete_edge(from_node, edge_type, to_node):
+        query=f"MATCH (n1 {{id:{from_node}}})-[e:{edge_type}]-(n2 {{id:{to_node}}}) delete e;"
+        tgql_query=f"MATCH (o1:Object)-[o:OBJECT_ATTRIBUTE]-(att {{title:'id'}})-[a:ATTRIBUTE_VALUE]-(v {{title:{from_node}}}),(o2:Object)-[:OBJECT_ATTRIBUTE]-(att2 {{title:'id'}})-[a2:ATTRIBUTE_VALUE]-(v2 {{title:{to_node}}}) with o1, o2 MATCH (o1)-[e:edge_type]-(o2) delete e;"
+        return query,tgql_query
+
     ###########update vertex property##############
     def _update_person(self): 
         tgdb_write_lists=[]
@@ -256,9 +369,5 @@ class LDBC():
                     break
         print("post_check_num",self._count_post_op)
         return tgdb_write_lists,tgql_write_lists
-    
-    ###########generate queries##############
-    def _get_queries(self):
-        file_path="peak_vertices/update_frequency/update_Num"+str(tpokec._max_update_op)+"_Avg"+str(tpokec.avg_update_ratio)+"_R"+str(tpokec.update_ratio)+".csv"
-        self._update_person_lists=self._get_type_lists(file_path,csv_path,update_type_num)
+
        
