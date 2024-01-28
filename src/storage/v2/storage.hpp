@@ -220,14 +220,10 @@ class Storage final {
     /// @throw std::bad_alloc
     VertexAccessor CreateVertex();
 
-    //hjm begin
     std::optional<history_delta::History_delta>& GetHistoryDelta(){
       return storage_->saved_history_deltas_;
     }
-
-     //根据kv数据创建边
     EdgeAccessor CreateHistoryEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
-    //根据delta数据创建边
     EdgeAccessor CreateHistoryEdge2(const storage::EdgeAccessor &another,int index,history_delta::historyContext &historyContext_);
     VertexAccessor CreateHistoryVertex(const storage::VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
     VertexAccessor CreateHistoryVertex2(const storage::VertexAccessor &another,int index,history_delta::historyContext &historyContext_);
@@ -249,19 +245,11 @@ class Storage final {
     
     storage::HistoryEdge CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another);
     storage::HistoryEdge CreateHistoryEdgeFromDelta(storage::HistoryEdge another,int index);
-    // storage::HistoryEdge CreateHistoryEdgeFromKV(storage::HistoryEdge edge_,nlohmann::json gid_delta_);
-    
-    //v3.0
+
     storage::HistoryEdge CreateHistoryEdgeFromDelta(const EdgeAccessor &another,int index);
     storage::HistoryEdge CreateHistoryEdgeFromKV(const EdgeAccessor &another,nlohmann::json gid_delta_);
     storage::HistoryEdge CreateHistoryEdgeFromKV(storage::HistoryEdge edge_,nlohmann::json gid_delta_);
     storage::HistoryEdge CreateAnchorEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_);
-    // test here
-    // storage::HistoryEdge CreateHistoryEdgeFromDelta2(const storage::EdgeAccessor &another);
-    // storage::HistoryEdge CreateHistoryEdgeFromDelta2(storage::HistoryEdge another,int index);
-    // storage::HistoryEdge CreateHistoryEdgeFromKV2(storage::HistoryEdge edge_,nlohmann::json gid_delta_);
-
-    //节点和边的信息都在一个gid里面
     void InitVertex(storage::Vertex *his_vertex,std::vector<storage::LabelId> &labels,std::vector<std::pair<uint64_t,uint64_t>> &labels_tt,std::map<storage::PropertyId, std::tuple<storage::PropertyValue,uint64_t,uint64_t>> &props_tt,uint64_t tt_ts,uint64_t tt_te);
     void InitVertex(storage::Vertex *vertex,history_delta::historyContextOnce &historyContext,bool delete_flag,std::vector<int> dead_deltas,std::vector<nlohmann::json> deleted_kv);
     
@@ -271,9 +259,6 @@ class Storage final {
     
     std::list<Gid> getdeletedvertex(){
       std::list<Gid> current_deleted_vertices;
-      // storage_->hjm_deleted_vertices_->swap(current_deleted_vertices);
-      // auto tmp=current_deleted_vertices;
-      // storage_->hjm_deleted_vertices_->swap(current_deleted_vertices);
       storage_->recover_deleted_vertices_.WithLock(
         [&](auto &deleted_vertices) { 
           current_deleted_vertices=std::move(deleted_vertices);
@@ -282,14 +267,6 @@ class Storage final {
       return current_deleted_vertices;
     }
 
-    // std::list<Gid> getDeletedEdges(){
-    //   std::list<Gid> current_deleted_edges;
-    //   storage_->recover_deleted_edges_.WithLock(
-    //     [&](auto &deleted_edges) { 
-    //       current_deleted_edges=std::move(deleted_edges);
-    //   });
-    //   return current_deleted_edges;
-    // }
 
     std::list<storage::Vertex*> getdeletedvertex2(){
       std::list<storage::Vertex*> current_deleted_vertices;
@@ -344,13 +321,6 @@ class Storage final {
     void saveHistoryVertex(uint64_t gid,uint64_t c_ts,uint64_t c_te,storage::HistoryVertex* vertex,uint64_t tt_ts,uint64_t tt_te){
       auto key=std::make_tuple(gid,c_ts,c_te);
       storage_->all_vertex[key].emplace_back(new HistoryVertex(vertex));
-      // 如果缓存大小超过最大值，移除最旧的元素
-      // if (storage_->all_vertex.size() > 100) {
-      //     auto oldest = storage_->all_vertex.begin();
-      //     auto oldest_key = oldest->first;
-      //     storage_->all_vertex.erase(oldest);
-      //     storage_->all_vertex_flag.erase(oldest_key);
-      // }
     }
     
     bool FindHistoryVertexFlag(uint64_t gid,uint64_t c_ts,uint64_t c_te){
@@ -365,7 +335,6 @@ class Storage final {
       storage_->all_vertex_flag.insert(key);
     }
 
-    //hjm end;
     std::optional<VertexAccessor> FindVertex(Gid gid, View view);
 
     VerticesIterable Vertices(View view) {
@@ -599,9 +568,8 @@ class Storage final {
 
   utils::BasicResult<CreateSnapshotError> CreateSnapshot();
 
-  //hjm begin
+  //use for aeong retention period clean
   bool ReclaimHistoryRentention(const std::chrono::milliseconds &retention_period);
-  //hjm end
 
  private:
   Transaction CreateTransaction(IsolationLevel isolation_level);
@@ -643,14 +611,11 @@ class Storage final {
   std::atomic<uint64_t> vertex_id_{0};
   std::atomic<uint64_t> edge_id_{0};
 
-  //hjm begin
+  //aeong store updated vertices (optional)
   std::map<std::tuple<uint64_t,uint64_t,uint64_t>,std::vector<std::tuple<storage::HistoryEdge*,uint64_t,uint64_t>>> all_edge;
   std::map<std::tuple<uint64_t,uint64_t,uint64_t>,std::list<storage::HistoryVertex*>> all_vertex;
-  // std::map<std::tuple<uint64_t,uint64_t,uint64_t>,bool> all_vertex_flag;
-  std::set<std::tuple<uint64_t,uint64_t,uint64_t>> all_vertex_flag;
+ std::set<std::tuple<uint64_t,uint64_t,uint64_t>> all_vertex_flag;
   std::set<std::tuple<uint64_t,uint64_t,uint64_t>> all_edge_flag;
-  //  std::map<uint64_t,std::vector<TypedValue,uint64_t,uint64_t>>> all_edge_;
-  //hjm end
 
   // Even though the edge count is already kept in the `edges_` SkipList, the
   // list is used only when properties are enabled for edges. Because of that we
@@ -679,16 +644,13 @@ class Storage final {
   utils::Scheduler gc_runner_;
   std::mutex gc_lock_;
 
-  //hjm begin
+  //aeong historical store
   std::optional<history_delta::History_delta> saved_history_deltas_;//{"history_delta"};
-  // std::map<Gid,std::pair<uint64_t,uint64_t>> vertex_time_table_;//存储顶点的id，历史开始时间，历史结束时间 
   utils::Synchronized<std::map<uint64_t,uint64_t>, utils::SpinLock> transaction_tables_;//store transactionid commit_timestamp
-  // utils::Synchronized<std::list<Gid>, utils::SpinLock> hjm_deleted_vertices_;//
   std::vector<uint64_t> hjm_deleted_vertices_;
   std::list<storage::Vertex*>  hjm_deleted_vertices;
   utils::Synchronized<std::list<Gid>, utils::SpinLock> recover_deleted_vertices_;
   utils::Synchronized<std::list<Gid>, utils::SpinLock> recover_deleted_edges_;
-  //hjm end
 
   // Undo buffers that were unlinked and now are waiting to be freed.
   utils::Synchronized<std::list<std::pair<uint64_t, std::list<Delta>>>, utils::SpinLock> garbage_undo_buffers_;
@@ -715,7 +677,7 @@ class Storage final {
   utils::Scheduler snapshot_runner_;
   utils::SpinLock snapshot_lock_;
 
-  //hjm
+  //aeong reclaim rocksdb runner
   utils::Scheduler reclaim_rocksdb_runner_;
 
   // UUID used to distinguish snapshots and to link snapshots to WALs

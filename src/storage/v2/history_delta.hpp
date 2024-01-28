@@ -22,7 +22,7 @@
 
 namespace history_delta {
 
-//hjm begin 结构体信息
+
 struct historyContext{
   std::map<uint64_t,std::vector<nlohmann::json>> fiter_history_datas_;//kv store中筛选的历史数据
   std::map<uint64_t,nlohmann::json> fiter_history_delete;//kv store中筛选的被删除的节点信息
@@ -33,10 +33,10 @@ struct historyContext{
 };
 
 struct historyContextOnce{
- std::vector<storage::LabelId> labels;
- std::vector<std::pair<uint64_t,uint64_t>> labels_tt;
- std::map<storage::PropertyId, std::tuple<storage::PropertyValue,uint64_t,uint64_t>> props_tt;
- std::vector<storage::LabelId> remove_labels;
+    std::vector<storage::LabelId> labels;
+    std::vector<std::pair<uint64_t,uint64_t>> labels_tt;
+    std::map<storage::PropertyId, std::tuple<storage::PropertyValue,uint64_t,uint64_t>> props_tt;
+    std::vector<storage::LabelId> remove_labels;
 };
 
 class History_delta final {
@@ -45,8 +45,6 @@ class History_delta final {
    explicit History_delta(const std::string &storage_directory);
 
    explicit History_delta(const std::string &storage_directory,bool realTimeFlag);
-
-  //  History_delta();
 
   /**
    * Gets a history delta from the storage.
@@ -66,7 +64,7 @@ class History_delta final {
    * @return a delta when the delta exists, nullopt otherwise
    * @throw Exception if unable to load user data.
    */
-  void GetAll() const;
+
   std::map<uint64_t,std::vector<nlohmann::json>> GetEdgeDelta(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t gid);
    std::pair<std::map<uint64_t,nlohmann::json>,std::map<uint64_t,std::vector<nlohmann::json>>> GetAllVertexDeltas(uint64_t c_ts,uint64_t c_te,std::string type);
   std::map<uint64_t,std::vector<nlohmann::json>> GetDeleteEdgeDeltas(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t v_gid);
@@ -97,7 +95,6 @@ class History_delta final {
    *
    */
   void SaveDeltaAll();
-  void SaveTimeTableAll();
   void SaveAnchorAll(std::map<std::string, std::string> &value);
   /**
    * Saves a delta object to the map.

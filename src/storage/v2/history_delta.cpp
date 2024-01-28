@@ -9,27 +9,14 @@
 #include "storage/v2/history_delta.hpp"
 #include "query/db_accessor.hpp"
 #include <cstring>
-#include <iostream>
-#include <limits>
-#include <utility>
-#include <fstream>
 #include <fmt/format.h>
 
 #include <stdlib.h>
-
-#include "auth/exceptions.hpp"
 #include "utils/flag_validation.hpp"
-#include "utils/license.hpp"
-#include "utils/logging.hpp"
-#include "utils/message.hpp"
 #include "utils/settings.hpp"
-#include "utils/string.hpp"
 #include <json/json.hpp>
 #include "query/serialization/property_value.hpp"
 #include "storage/v2/storage.hpp"
-#include <arpa/inet.h>
-#include "storage/v2/replication/config.hpp"
-
 namespace history_delta {
 
 namespace {
@@ -88,7 +75,7 @@ nlohmann::json SerializePropertyValueMap(const std::map<std::string, storage::Pr
 };
 
 
-//时间约束比较
+//help functions
  bool TemporalCheck(uint64_t object_ts,uint64_t object_te,uint64_t c_ts,uint64_t c_te,std::string type){
   if(type=="as of"){
     if(object_ts<=c_ts & object_te>c_te ){
@@ -108,7 +95,6 @@ nlohmann::json SerializePropertyValueMap(const std::map<std::string, storage::Pr
   return false;
 }
 
-// 字符串分割
 std::vector<std::string> splits(const std::string &str, const std::string &pattern){
     std::vector<std::string> res;
     if (str == "")
@@ -139,7 +125,7 @@ int64_t swap64(const int64_t &v)
 }
 
 std::string uint_convert_to_string(const int64_t time,bool realTimeFlagConstant){
-   if(false){//realTimeFlagConstant
+   if(realTimeFlagConstant){
     if(time>0){
       return std::to_string(std::numeric_limits<uint64_t>::max()-time);
     }else{
@@ -156,17 +142,13 @@ std::string uint_convert_to_string(const int64_t time,bool realTimeFlagConstant)
   }
 }
 
-// return std::to_string(time);
-
 std::tuple<uint64_t,int64_t,int64_t> string_convert_to_uint(std::string res,bool realTimeFlagConstant){
   auto size=sizeof(int64_t);
-
-  if(false){//realTimeFlagConstant
+  if(realTimeFlagConstant){
     auto split_info=splits(res,":");
     auto gid=(uint64_t)std::stoi(split_info[1]);
     auto ts=-(std::numeric_limits<uint64_t>::max()+std::stoll(split_info[2]));
     auto te=-(std::numeric_limits<uint64_t>::max()+std::stoll(split_info[3]));
-    // std::cout<<"string_convert_to_uint gid:"<<res<<" gid:"<<gid<<" ts:"<<ts<<" te:"<<te<<"\n";
     return std::make_tuple(gid,ts,te);
   }else{
     auto length=res.length();
@@ -184,13 +166,10 @@ std::tuple<uint64_t,int64_t,int64_t> string_convert_to_uint(std::string res,bool
       redo[i]=redo_str1[i];
       redo2[i]=redo_str2[i];
     }
-    // auto ts = *(int*) redo2;// redo_str;
-    // auto te = *(int*) redo;
     auto ts = *(int64_t*) redo2;// redo_str;
     auto te = *(int64_t*) redo;
     ts=swap64(ts);
     te=swap64(te);
-    // std::cout<<"string_convert_to_uint gid:"<<res<<" gid:"<<gid<<" ts:"<<ts<<" te:"<<te<<"\n";
     return std::make_tuple(gid,ts,te);
   }
   // std::cout<<"string_convert_to_int: "<<ts<<" "<<te<<"\n";
@@ -202,21 +181,7 @@ std::tuple<uint64_t,int64_t,int64_t> string_convert_to_uint(std::string res,bool
   // return std::make_tuple(gid,ts,te);
 }
 
-/**
- * 合并两个json数据
- * 数据类型包含以下几种：
- * SET_PROPERTY:
- * RECREATE_OBJECT
- * ADD_LABEL:
- * ADD_OUT_EDGE:
- * REMOVE_OUT_EDGE:
- * 
- * */
 void combineVertex(nlohmann::json before_data,nlohmann::json &current_data){
-  //如果当前数据是RECREATE_OBJECT，则表示这个版本不需要和前面的数据进行合并
-  // auto find_recreate=current_data.find("RECREATE_OBJECT");
-  // if(find_recreate!=current_data.end()) return;
-  
   for (auto it = before_data.begin(); it != before_data.end(); ++it) {
     auto it_key = it.key();
     auto it_value=it.value();
@@ -241,21 +206,7 @@ void combineVertex(nlohmann::json before_data,nlohmann::json &current_data){
         for(auto before_label:before_data[it_key]){
           current_info.emplace_back(before_label);
         }  
-      }  
-      // else if(it_key!="TT_TS" &it_key!="TT_TE"){
-      //   auto now_edges_value = current_data[it_key];//edges info
-      //   auto before_edge_value=it_value;
-      //   for (auto its = before_edge_value.begin(); its != before_edge_value.end(); ++its){
-      //     auto its_key = its.key();
-      //     auto its_value=its.value();
-      //     auto its_iter=now_edges_value.find(its_key);
-      //     if(its_iter==now_edges_value.end()){//如果当前数据没有这种类型，则直接添加
-      //       now_edges_value.emplace(its_key,its_value);
-      //     }else if(its_key=="SP"){
-            
-      //     }
-      //   }
-      // }
+      }
     }
   }
 }
@@ -269,7 +220,6 @@ void combineEdge(nlohmann::json before_data,nlohmann::json &current_data){
     if(it_iter==current_data.end()){//如果当前数据没有这个节点的信息，则直接添加
       current_data.emplace(edge_id,edge_jsons);
     }else{
-      // std::cout<<"combine edge:"<<before_data[edge_id].dump()<<" "<<current_data[edge_id].dump()<<"\n";
       combineVertex(before_data[edge_id],current_data[edge_id]);
     }
   }
@@ -371,24 +321,6 @@ std::pair<bool,std::pair<std::vector<int>,std::vector<nlohmann::json>>> getHisto
     if(fiter_history_datas_.find(object_gid)!=fiter_history_datas_.end()){
       gid_history_deltas_=fiter_history_datas_[object_gid];
     }
-    // if(current_vertex_){//节点，直接获取gid      
-    //   if(fiter_history_datas_.find(vertex_gid)!=fiter_history_datas_.end()){
-    //     gid_history_deltas_=fiter_history_datas_[vertex_gid];
-    //   }
-    // }else{//边
-    //   if(fiter_history_datas_.find(vertex_gid)!=fiter_history_datas_.end()){
-    //     auto vertex_history_info=fiter_history_datas_[vertex_gid];
-    //     for(auto tmp:vertex_history_info){// "0":json "1":json
-    //       auto edge_str=std::to_string(edge_gid);
-    //       if( tmp.find(edge_str)!= tmp.end()){
-    //         auto edge_data= tmp[edge_str];
-    //         edge_data["TT_TS"]=tmp["TT_TS"];
-    //         edge_data["TT_TE"]=tmp["TT_TE"];
-    //         gid_history_deltas_.emplace_back(edge_data);
-    //       }
-    //     }
-    //   }
-    // }
   }
   if(!gid_history_deltas_.empty()) get_history_flag=true;
   return std::make_pair(get_history_flag,std::make_pair(dead_deltas,gid_history_deltas_));
@@ -405,58 +337,13 @@ const std::string kVertexEdgePrefix = "VE:";
 
 const std::string kVertexTimePrefix="VT:";
 const std::string kEdgeTimePrefix="ET:";
-/**
- * All data stored in the `Auth` storage is stored in an underlying
- * `kvstore::KVStore`. Because we are using a key-value store to store the data,
- * the data has to be encoded. The encoding used is as follows:
- *
- * User: key="gid:<username>", value="<json_encoded_members_of_user>"
- */
 
-History_delta::History_delta(const std::string &storage_directory) : storage_(storage_directory) {}//"/home/hjm/memgraph/build/history_deltas"
+
+History_delta::History_delta(const std::string &storage_directory) : storage_(storage_directory) {}
 
 History_delta::History_delta(const std::string &storage_directory,bool realTimeFlag) : storage_(storage_directory) {
   realTimeFlagConstant=realTimeFlag;
 }
-
-
-void History_delta::GetAll() const {
-  auto kDeltaPrefixs="ED:131361";
-  int i =0;
-  // std::cout<<"get all start here\n";
-  // for (auto it = storage_.starts(kDeltaPrefixs); it != storage_.last(kDeltaPrefixs); ++it) {
-  //   auto [gid,ts,te]=string_convert_to_uint(it->first);
-  //   std::cout<<"ts:"<<ts<<" te:"<<te<<it->second<<"\n";GetVertexInfo
-  //   i+=1;
-  //   if(i>5) break;
-  // }
-  // i=0;
-  // std::cout<<"get all begin here\n";
-  // for (auto it = storage_.begin(kDeltaPrefixs); it != storage_.end(kDeltaPrefixs); ++it) {
-  //   auto [gid,ts,te]=string_convert_to_uint(it->first);
-  //   std::cout<<"ts:"<<ts<<" te:"<<te<<" "<<it->second<<"\n";
-  //   i+=1;
-  //   if(i>5) break;
-  // }
-  i=0;
-  std::cout<<"get noprefix begin here\n";
-  for (auto it = storage_.begin(); it != storage_.end(); ++it) {
-    auto [gid,ts,te]=string_convert_to_uint(it->first,realTimeFlagConstant);
-    std::cout<<"ts:"<<ts<<" te:"<<te<<" "<<it->second<<"\n";
-    i+=1;
-    // if(i>5) break;
-  }
-}
-
-// seek 符合时间条件的最开始的record
-// auto iter_end=storage_.last(prefix);//null
-// auto it=storage_.starts(prefix);//比当前时间大一个的指针
-// if(it!=iter_end){//回溯
-//   --it;
-//   if(it==iter_end){
-//     it=storage_.starts(prefix);
-//   }
-// } 
 
 /**
  * @brief v2.0 获取所有顶点（删除+未被删除）的信息。首先根据hash_table找到符合时间条件的顶点，随后seek表找到顶点的信息
@@ -832,76 +719,6 @@ std::map<uint64_t,std::vector<nlohmann::json>> History_delta::GetDeleteEdgeDelta
   return fiter_history_datas_;
 }
 
-/**
- * @brief 获取delta顶点或者边的属性
- * 
- * @param vertex_deltas 
- * @param c_ts 
- * @param c_te 
- * @param types_ 
- * @param is_vertex 
- * @return std::pair<bool,std::vector<int>> 
- */
-// std::pair<bool,std::vector<int>> History_delta::getDeadInfo(storage::Delta* vertex_deltas,uint64_t c_ts,uint64_t c_te,std::string types_,bool is_vertex){
-//   //dead info 属性 label和边 不需要考虑
-//   std::cout<<"get dead info\n";
-//   auto dead_deltas=std::vector<int>();//记住delta的下标
-//   auto tmp_ts=0;
-//   auto tmp_te=0;
-//   int index_=0;
-//   auto need_deleted_flag=true;
-//   bool delta_is_edge=false;
-//   while (vertex_deltas != nullptr) {
-//     delta_is_edge=false;
-//     switch (vertex_deltas->action) {
-//       case storage::Delta::Action::ADD_OUT_EDGE:
-//       case storage::Delta::Action::REMOVE_OUT_EDGE: 
-//       case storage::Delta::Action::ADD_IN_EDGE:
-//       case storage::Delta::Action::REMOVE_IN_EDGE:{
-//         delta_is_edge=true;
-//         break;
-//       }
-//       default:break;
-//     }
-//     auto transaction_ts=vertex_deltas->transaction_st;
-//     auto transaction_te=vertex_deltas->commit_timestamp!=0?vertex_deltas->commit_timestamp:std::numeric_limits<uint64_t>::max();
-//     std::cout<<"get dead info here2:"<<transaction_ts<<" "<<transaction_te<<"\n";
-//     if(transaction_ts>= transaction_te){//节点刚创建的状态，直接跳过
-//       break;
-//     }
-//     if(is_vertex & delta_is_edge & transaction_te!=(uint64_t)std::numeric_limits<int64_t>::max()) {
-//       vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
-//       index_++;
-//       continue;
-//     }//需要顶点的数据 delta是边
-    
-//     //如果是下一个事务的操作,并且上一个事务通过约束条件的判断，则创建新的点
-//     if((transaction_ts!=tmp_ts || transaction_te!=tmp_te) & history_delta::TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types_)){//&TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types)
-//       std::cout<<"get indeed delta:"<<tmp_ts<<" "<<tmp_te<<"\n";
-//       dead_deltas.emplace_back(index_);
-//       if(types_=="as of") {//如果是时间点，则直接返回，也不需要遍历delted history的记录
-//         need_deleted_flag=false;
-//         break;
-//       }
-//     }
-//     tmp_ts=transaction_ts;
-//     tmp_te=transaction_te;
-//     // Move to the next delta.
-//     vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
-//     index_++;
-//   }
-
-//   //最后一个事务的数据
-//   if(need_deleted_flag){
-//     if((tmp_ts!=tmp_te) & history_delta::TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types_)){//&TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types)
-//       dead_deltas.emplace_back(index_);
-//       if(types_=="as of") {//如果是时间点，则直接返回，也不需要遍历delted history的记录
-//         need_deleted_flag=false;
-//       }
-//     }
-//   }
-//   return std::make_pair(need_deleted_flag,dead_deltas);
-// }
 
 
 std::pair<bool,std::vector<int>> History_delta::getDeadInfo(storage::Delta* vertex_deltas,uint64_t c_ts,uint64_t c_te,std::string types_,bool is_vertex){
@@ -946,32 +763,6 @@ std::pair<bool,std::vector<int>> History_delta::getDeadInfo(storage::Delta* vert
     dead_deltas.emplace_back(index_);
     need_deleted_flag=false;
     break;
-    
-    if(history_delta::TemporalCheck(transaction_ts,transaction_te,c_ts,c_te,types_)){//&TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types)
-      std::cout<<"get indeed delta here:"<<transaction_ts<<" "<<transaction_te<<"\n";
-      dead_deltas.emplace_back(index_);
-      // if(vertex_deltas->action==storage::Delta::Action::SET_PROPERTY){
-      //   auto property_value=vertex_deltas->property.value;
-      //   if(property_value.type()!=storage::PropertyValue::Type::Null) dead_properties[vertex_deltas->property.key]=property_value;
-      //   else{
-      //     dead_properties[vertex_deltas->property.key]=storage::PropertyValue("NULL");;
-      //   }
-      // }
-      // auto property_id = storage::PropertyId::FromUint(storage_.name_id_mapper_.NameToId("transaction_ts"));
-      // auto property_id2 = storage::PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-      // auto property_value = storage::PropertyValue((int64_t)tt_ts);
-      // dead_properties[property_id]=property_value;
-      // auto property_value2 = storage::PropertyValue((int64_t)tt_te);
-      // dead_properties[property_id2]=property_value2;
-
-      if(types_=="as of") {//如果是时间点，则直接返回，也不需要遍历delted history的记录
-        need_deleted_flag=false;
-        break;
-      }
-    }
-    // Move to the next delta.
-    vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
-    index_++;
   }
   return std::make_pair(need_deleted_flag,dead_deltas);
 }
@@ -1029,9 +820,7 @@ std::pair<std::vector< std::tuple< std::map<storage::PropertyId,storage::Propert
     // Move to the next delta.
     vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
   }
-  // if(res.size()==0 && transaction_ts!=0){
-  //   res.emplace_back(std::make_tuple(maybe_properties,transaction_ts,transaction_te));
-  // }
+
   return std::make_pair(res,need_deleted_flag);
 }
 
@@ -1042,236 +831,28 @@ std::pair<std::vector< std::tuple< std::map<storage::PropertyId,storage::Propert
 void History_delta::SaveDeltaAll() {
   bool success = false;
   if(gid_delta_.empty()) return;
-  // std::cout<<"SaveDeltaAll\n";
-  //save VD ED
   std::map<std::string,std::string> gid_data_tmp;
-  // std::ofstream ofs_edge;
-  // std::ofstream ofs_vertex;
   for(auto [key,value]:gid_delta_){
     gid_data_tmp[key]=value.dump();
-    // auto [gid,ts,te]=string_convert_to_uint(key,realTimeFlagConstant);
-    // std::cout<<"save delta here "<<gid<<" "<<ts<<" "<<te<<" value info:"<<value.dump()<<std::endl;
-  //   //被删除的节点的信息
-  //   if(value.find("R")!=value.end()){
-  //     auto put_key=kVertexAnchorPrefix + key.substr(3);
-  //     gid_delta_[put_key]=value.dump();
-  //   }
-  //   success=storage_.Put(key, value.dump());
-  //   if (!success) {
-  //     std::cout<<"Couldn't save delta!"<<std::endl;
-  //   }
-  //   //输出信息
-  //   // auto prefix=key.substr(0,3);
-  //   // auto [gid,ts,te]=string_convert_to_uint(key);
-  //   // if(prefix==kEdgeDeltaPrefix) ofs_edge<<std::to_string(gid)<<"####"<<std::to_string(-ts)<<"####"<<std::to_string(-te)<<"\n";
-  //   // if(prefix==kVertexDeltaPrefix) ofs_vertex<<std::to_string(gid)<<"####"<<std::to_string(-ts)<<"####"<<std::to_string(-te)<<"\n";
-  //   // std::cout<<"save here "<<prefix<<" "<<gid<<" "<<ts<<" "<<te<<" value info:"<<value.dump()<<std::endl;
-  //   // std::cout<<"save here "<<key<<" value info:"<<value.dump()<<std::endl;
   }
   success=storage_.PutMultiple(gid_data_tmp);
   if (!success) {
     std::cout<<"Couldn't save delta!"<<std::endl;
   }
   gid_delta_.clear();
-  // success=storage_.PutMultiple(gid_data_tmp_);
-  // if (!success) {
-  //   std::cout<<"Couldn't save delta!"<<std::endl;
-  // }
 }
 
-// void History_delta::SaveDeltaAll() {
-//   bool success = false;
-//   if(gid_delta_delta_.empty()) return;
-//   std::cout<<"SaveDeltaAll\n";
-//   std::map<std::string, std::string> final_res;
-//   //save VD ED
-//   std::map<uint64_t,uint64_t> before_gid_commit_;
-//   // auto before_gid=(uint64_t)0;
-//   // auto before_commit=(uint64_t)0;
-//   for(auto [key,value]:gid_delta_delta_){
-//     auto prefix=std::get<0>(key);
-//     auto gid=std::get<1>(key);
-//     auto commit=std::get<2>(key);
-//     auto start=commit;
-//     auto before_commit=before_gid_commit_.find(gid)!=before_gid_commit_.end()?before_gid_commit_[gid]:commit;
-//     // std::cout<<"start12:"<<before_commit<<" "<<before_gid_commit[gid]<<"\n";
-//     if(commit!=before_commit){
-//       start=before_commit;
-//       // std::cout<<"start2:"<<start<<"\n";
-//     }else{
-//       auto find_prefix=prefix+std::to_string(gid);
-//       // std::cout<<"prefix"<<find_prefix<<"\n";
-//       auto it=storage_.starts(find_prefix); 
-//       if(it!=storage_.last(find_prefix)){
-//         // std::cout<<"find here:"<<it->first<<"\n";
-//         auto gets=std::get<2>(string_convert_to_uint(it->first));
-//         start=-gets;
-//         // std::cout<<"start3:"<<start<<"\n";
-//       }
-//     }
-//     // if(gid==before_gid){
-//     //   if(commit!=before_commit){
-//     //     start=before_commit;
-//     //     std::cout<<"start2:"<<start<<"\n";
-//     //   }else{
-//     //     auto find_prefix=prefix+std::to_string(gid);
-//     //     auto it=storage_.begin(find_prefix); 
-//     //     if(it!=storage_.end(find_prefix)){
-//     //       start=std::get<2>(string_convert_to_uint(it->first));
-//     //       std::cout<<"start3:"<<start<<"\n";
-//     //     }
-//     //   }
-//     // }else{
-//     //   auto find_prefix=prefix+std::to_string(gid);
-//     //   auto it=storage_.begin(find_prefix); 
-//     //   if(it!=storage_.end(find_prefix)){
-//     //     start=std::get<2>(string_convert_to_uint(it->first));
-//     //     std::cout<<"start4:"<<start<<"\n";
-//     //   }
-//     // }
-    
-//     value["TT_TS"]=start;
-//     value["TT_TE"]=commit;
-//     std::string start_str=uint_convert_to_string((int64_t)-start);
-//     std::string commit_str=uint_convert_to_string((int64_t)-commit);
-//     auto prefix_key=prefix+std::to_string(gid)+":"+(start_str)+":"+(commit_str);
-//     final_res[prefix_key]=value.dump();
-//     if(value.find("R")!=value.end()){
-//       auto put_key=kVertexAnchorPrefix + prefix_key.substr(3);
-//       success=storage_.Put(put_key,value.dump());
-//       // final_res[put_key]=value.dump();
-//     }
-//     // std::cout<<"construct here:"<<prefix_key<<" start:"<<start<<" commit:"<<commit<<" "<<value.dump()<<" \n";
-//     success=storage_.Put(prefix_key,value.dump());
-//     if (!success) {
-//       std::cout<<"Couldn't save delta!"<<std::endl;
-//     }
-//     before_gid_commit_[gid]=commit;
-    
-//     if(prefix=="VD:"){
-//       auto iter=vertex_time_table_.find(gid);
-//       if(iter==vertex_time_table_.end()){
-//         vertex_time_table_[gid]=std::make_pair(start,commit);
-//       }else{
-//         auto &value=vertex_time_table_[gid];
-//         value.second=commit;
-//         if(value.first==0){
-//           value.first=start;
-//         }
-//       }
-//     }   
-//     //save hash index
-//     if(prefix=="ED:"){
-//       auto iter=edge_time_table_.find(gid);
-//       if(iter==edge_time_table_.end()){
-//         edge_time_table_[gid]=std::make_pair(start,commit);
-//       }else{
-//         auto &value=edge_time_table_[gid];
-//         value.second=commit;
-//         if(value.first==0){
-//           value.first=start;
-//         }
-//       }
-//     }
-
-//     // before_gid=gid;
-//     // before_commit=commit;
-//     //被删除的节点的信息
-//     // if(value.find("R")!=value.end()){
-//     //   auto put_key=kVertexAnchorPrefix + key.substr(3);
-//     //   gid_delta_[put_key]=value;
-//     // }
-//     // success=storage_.Put(key, value.dump());
-//     //输出信息
-//     // auto prefix=key.substr(0,3);
-//     // auto [gid,ts,te]=string_convert_to_uint(key);
-//     // std::cout<<"save here "<<prefix<<" "<<gid<<" "<<ts<<" "<<te<<" value info:"<<value.dump()<<std::endl;
-//   }
-  
-//   // success=storage_.PutMultiple(final_res);
-//   // if (!success) {
-//   //   std::cout<<"Couldn't save delta!"<<std::endl;
-//   // }
-//   gid_delta_.clear();
-//   gid_delta_delta_.clear();
-
-// }
 
 void History_delta::SaveAnchorAll(std::map<std::string, std::string> &value){
-  // std::cout<<"save anchor all here: "<<value.size()<<"\n";
-  // for(auto [key1,value1]:value){
-  //   auto [gid,ts,te]=string_convert_to_uint(key1);
-  //   std::cout<<key1<<" value:"<<value1<<" gid:"<<gid<<" ts:"<<ts<<" te:"<<te<<"\n";
-  // }
   bool success=storage_.PutMultiple(value);
   if (!success) {
     std::cout<<"Couldn't save delta!"<<std::endl;
   }
 }
-// void History_delta::SaveAnchorAll(){
-//   // std::cout<<"SaveAnchorAll:"<<edge_anchor_.size()<<"\n";
-//   bool success = false;
-//   if(edge_anchor_.empty()) return;
-//   std::cout<<"SaveAnchorAll:"<<edge_anchor_.size()<<"\n";
-//   //save anchor info
-//   // for(auto value:edge_anchor_){
-//   //   std::cout<<"SaveAnchorAll:"<<value.size()<<"\n";
-//   //   for(auto [key1,value1]:value){
-//   //     std::cout<<key1<<" "<<value1<<"\n";
-//   //   }
-//   //   success=storage_.PutMultiple(value);
-//   //   if (!success) {
-//   //     std::cout<<"Couldn't save delta!"<<std::endl;
-//   //   }
-//   // } 
-//   while(!edge_anchor_.empty()){
-//     auto value= edge_anchor_.front();
-//     for(auto [key1,value1]:value){
-//       // std::cout<<key1<<" "<<value1<<"\n";
-//       if(key1.find("131361")!=std::string::npos) storage_.Put(key1,value1);
-//     }
-//     // success=storage_.PutMultiple(value);
-//     // if (!success) {
-//     //   std::cout<<"Couldn't save delta!"<<std::endl;
-//     // }
-//     edge_anchor_.pop_front();
-//   }
-//   if(!edge_anchor_.empty())SaveAnchorAll();
-//   //  std::cout<<"SaveAnchorAll done:"<<edge_anchor_.size()<<"\n";
-//   // edge_anchor_.clear();
-// }
+
 
 void History_delta::SaveEdgeAnchorAll(uint64_t tid,std::map<std::string, std::string>& data){
   if(!data.empty())edge_anchor_.emplace_back(data);
-  // std::cout<<"SaveEdgeAll:"<<data.size()<<"\n";
-  //[tid]=data;
-}
-
-void History_delta::SaveTimeTableAll(){
-  // if(vertex_time_tmp_.size()!=0 || edge_time_tmp_.size()!=0)std::cout<<"SaveTimeTableAl\n";
-  // bool success = false;
-  // //save vertex time table
-  // for(auto [gids,value]:vertex_time_tmp_){
-  //   auto min_ts=value.first;//顶点的历史最小时间
-  //   auto max_te=value.second;//顶点的历史最大时间
-  //   auto values=std::to_string(min_ts)+":"+std::to_string(max_te);
-  //   success=storage_.Put(kVertexTimePrefix+std::to_string(gids), values);
-  //   if (!success) {
-  //     std::cout<<"Couldn't save delta!"<<std::endl;
-  //   }
-  // }
-  // //save edge time table
-  // for(auto [gids,value]:edge_time_tmp_){
-  //   auto min_ts=value.first;//顶点的历史最小时间
-  //   auto max_te=value.second;//顶点的历史最大时间
-  //   auto values=std::to_string(min_ts)+":"+std::to_string(max_te);
-  //   success=storage_.Put(kEdgeTimePrefix+std::to_string(gids), values);
-  //   if (!success) {
-  //     std::cout<<"Couldn't save delta!"<<std::endl;
-  //   }
-  // }
-  // vertex_time_tmp_.clear();
-  // edge_time_tmp_.clear();
 }
 
 void History_delta::SaveDelta(storage::Gid gid,const std::optional<storage::Gid> to_gid,const uint64_t start,const uint64_t commit,storage::Delta& delta,storage::NameIdMapper &name_id_mapper) {
@@ -1393,77 +974,6 @@ void History_delta::SaveDelta(storage::Gid gid,const std::optional<storage::Gid>
   // edge_time_tmp_[vertex_gid]=edge_time_table_[vertex_gid];
 }
 
-// void History_delta::SaveVertexAnchor(storage::Gid gid,const uint64_t start,std::vector<storage::LabelId> &maybe_labels,std::map<storage::PropertyId, storage::PropertyValue> &maybe_properties,storage::NameIdMapper &name_id_mapper_) {
-//   std::string start_str=uint_convert_to_string((int64_t)start);
-//   auto key=kVertexAnchorPrefix + std::to_string(gid.AsUint()) +":"+(start_str)+":"+(start_str); //std::to_string  std::to_string
-//   //save vertex to restore
-//   nlohmann::json data = nlohmann::json::object();
-//   //labels
-//   auto add_labels=std::vector<std::pair<std::string,std::string>>();
-//   for (const auto &label : maybe_labels) {
-//     add_labels.emplace_back("AL",name_id_mapper_.IdToName(label.AsUint()));//name_id_mapper_.IdToName(label.AsUint())
-//   }
-//   data["L"] =add_labels;
-
-//   //properties
-//   nlohmann::json data2 = nlohmann::json::object();
-//   for (const auto &prop : maybe_properties) {
-//     auto property_name = name_id_mapper_.IdToName(prop.first.AsUint());//delta.property.key.AsUint();//
-//     auto property_value = SerializePropertyValue(prop.second);//query::serialization::
-//     data2[property_name] = property_value;
-//   }
-//   data["SP"]=data2;
-//   gid_delta_[key]=data;
-// }
-
-// void History_delta::SaveEdgeAnchor(storage::Gid gid,const uint64_t start,std::map<storage::PropertyId, storage::PropertyValue> &maybe_properties,storage::NameIdMapper &name_id_mapper_) {
-//   std::cout<<"SaveEdgeAnchor\n";
-//   std::string start_str=uint_convert_to_string((int64_t)start);
-//   auto key=kEdgeAnchorPrefix + std::to_string(gid.AsUint()) +":"+(start_str)+":"+(start_str); //std::to_string  std::to_string
-//   //properties
-//   nlohmann::json data = nlohmann::json::object();
-//   nlohmann::json data2 = nlohmann::json::object();
-//   for (const auto &prop : maybe_properties) {
-//     auto property_name = name_id_mapper_.IdToName(prop.first.AsUint());//delta.property.key.AsUint();//
-//     auto property_value = SerializePropertyValue(prop.second);//query::serialization::
-//     data2[property_name] = property_value;
-//   }
-//   data["SP"]=data2;
-//   gid_delta_[key]=data;
-// }
-
-
-// void History_delta::SaveVertexAnchor(storage::Gid gid,const uint64_t start,nlohmann::json data) {
-//   std::string start_str=uint_convert_to_string((int64_t)start);
-//   auto key=kVertexAnchorPrefix + std::to_string(gid.AsUint()) +":"+(start_str)+":"+(start_str); //std::to_string  std::to_string
-//   gid_time_tables_[key]=data.dump();
-//   // bool success=false;
-//   // success=storage_.Put(key, data.dump());
-//   // //输出信息
-//   // auto prefix=key.substr(0,3);
-//   // auto [gids,ts,te]=string_convert_to_uint(key);
-//   // std::cout<<"save here "<<prefix<<" "<<gids<<" "<<ts<<" "<<te<<" value info:"<<data<<std::endl;
-//   // if (!success) {
-//   //   std::cout<<"Couldn't save delta!"<<std::endl;
-//   // }
-// }
-
-// void History_delta::SaveEdgeAnchor(storage::Gid gid,const uint64_t start,nlohmann::json data) {
-//   std::cout<<"SaveEdgeAnchor\n";
-//   std::string start_str=uint_convert_to_string((int64_t)start);
-//   auto key=kEdgeAnchorPrefix + std::to_string(gid.AsUint()) +":"+(start_str)+":"+(start_str); //std::to_string  std::to_string
-//   gid_time_tables_[key]=data.dump();
-//   // bool success=false;
-//   // success=storage_.Put(key, data.dump());
-//   // //输出信息
-//   // auto prefix=key.substr(0,3);
-//   // auto [gids,ts,te]=string_convert_to_uint(key);
-//   // std::cout<<"save here "<<prefix<<" "<<gids<<" "<<ts<<" "<<te<<" value info:"<<data<<std::endl;
-//   // if (!success) {
-//   //   std::cout<<"Couldn't save delta!"<<std::endl;
-//   // }
-// }
-
 std::string History_delta::getPrefix(storage::Gid gid,const uint64_t start,bool vertex){
   std::string start_str=uint_convert_to_string((int64_t)start,realTimeFlagConstant);
   auto prefix=vertex?kVertexAnchorPrefix:kEdgeAnchorPrefix;
@@ -1478,28 +988,16 @@ bool History_delta::RemoveOldHistory(const std::chrono::milliseconds &retention_
   auto now_time = std::chrono::system_clock::now();
   auto now_time_milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now_time.time_since_epoch()).count();
   int64_t clean_timestamp = now_time_milliseconds-retention_period.count() ;
-  std::cout<<"remove history here:"<<clean_timestamp<<"\n";
   std::vector<std::string> delete_keys;
-  int i=0;
   for (auto it = storage_.begin(); it != storage_.end(); ++it) {
     auto [gid,ts,te]=string_convert_to_uint(it->first,realTimeFlagConstant);
     te=te>0?te:-te;
     if(te<=clean_timestamp){
       delete_keys.push_back(it->first);
     }
-    i+=1;
-    if(i<5){
-      std::cout<<"ts:"<<ts<<" te:"<<te<<" "<<it->second<<"\n";
-    }
   }
   if (!storage_.DeleteMultiple(delete_keys)) {
     std::cout<<"Couldn't Remove Old History!\n";
-  }else{
-    std::cout<<"clean "<<i<<" history delata\n";
-    // if(i>=100){
-    //   bool status=storage_.CompactRange("","");
-    //   std::cout<<"compact:truely delete:"<<status<<"\n";
-    // }
   }
   return true;
 }

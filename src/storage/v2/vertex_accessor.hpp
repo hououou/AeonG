@@ -41,18 +41,9 @@ class VertexAccessor final {
         config_(config),
         for_deleted_(for_deleted) {}
 
-  // VertexAccessor(const VertexAccessor &another)
-  //     : vertex_(another.vertex_),
-  //       transaction_(another.transaction_),
-  //       indices_(another.indices_),
-  //       constraints_(another.constraints_),
-  //       config_(another.config_),
-  //       for_deleted_(another.for_deleted_) {}
- 
- //hjm begin
+
   static std::optional<VertexAccessor>  Creates(Vertex *vertex, Transaction *transaction, Indices *indices,
                                                      Constraints *constraints, Config::Items config, View view);
-  // hjm end
 
   static std::optional<VertexAccessor> Create(Vertex *vertex, Transaction *transaction, Indices *indices,
                                               Constraints *constraints, Config::Items config, View view);
@@ -85,17 +76,14 @@ class VertexAccessor final {
   /// @throw std::bad_alloc
   Result<std::map<PropertyId, PropertyValue>> ClearProperties();
 
-  //hjm begin
   Result<std::map<PropertyId, PropertyValue>> ClearProperties2();
   bool haslabels();
   void propsizes();
   Delta *getDeltas();
   std::map<PropertyId, PropertyValue> getProperties(){return vertex_->properties.Properties();}
-  uint64_t transaction_st() const noexcept{return vertex_->transaction_st;}//transaction_st;}
-  // wzy edit 0512
-  // uint64_t tt_te(){return vertex_->tt_te;}
+  uint64_t transaction_st() const noexcept{return vertex_->transaction_st;}
   uint64_t tt_te(){return (uint64_t)std::numeric_limits<int64_t>::max();}
-  // wzy end
+
   bool hasdelete(){
     return vertex_->deleted;
   }
@@ -111,8 +99,6 @@ class VertexAccessor final {
   std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> getOutEdges(){
     return vertex_->out_edges;
   }
-
-  //hjm end
 
   /// @throw std::bad_alloc
   Result<PropertyValue> GetProperty(PropertyId property, View view) const;

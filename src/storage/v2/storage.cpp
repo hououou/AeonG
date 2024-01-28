@@ -1428,23 +1428,7 @@ storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromKV(const EdgeAccess
     // Move to the next delta.
     deltas = deltas->next.load(std::memory_order_acquire);    
   }
-    
-  //deleted properties 
-  // wzy begin no-prop-edge-version
-  // if(gid_delta_.find("SP")!=gid_delta_.end()){
-  //   auto history_props_=gid_delta_["SP"];
-  //   for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-  //     auto key = it_iter.key();
-  //     auto value=it_iter.value();
-  //     auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-  //     auto property_value = DeserializePropertyValue(value);//query::serialization::
-  //     if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[property_id]=property_value;
-  //     else{
-  //       maybe_properties[property_id]=storage::PropertyValue("NULL");;
-  //     }
-  //   }
-  // }
-  //wzy end
+  
 
   //TT_TS TT_TE
   auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
@@ -2850,20 +2834,14 @@ utils::BasicResult<ConstraintViolation, void> Storage::Accessor::Commit(
   if(!time_flag){
     for (auto &delta : transaction_.deltas) {
       auto commit_timestamp = transaction_.commit_timestamp->load(std::memory_order_acquire);
-      // std::cout<<"here:"<<delta.transaction_st<<" "<<commit_timestamp<<"\n";
       if(delta.transaction_st==0 ){
-        // std::cout<<"here thing\n";
-        // std::cout<<"delta info commit here:"<<commit_timestamp<<"\n";
         delta.transaction_st=commit_timestamp+1;
       }
       delta.commit_timestamp=commit_timestamp;
-      // std::cout<<"delta info commit here:"<<delta.gid.AsUint()<<" "<<delta.transaction_st<<" "<<commit_timestamp<<"\n";
       auto prev = delta.prev.Get();
       switch (prev.type) {
         case storage::PreviousPtr::Type::VERTEX: {
           storage::Vertex *vertex = prev.vertex;
-          // commit_vertices.insert(vertex);
-          // std::lock_guard<utils::SpinLock> vertex_guard(vertex->lock);
           if(vertex->deleted){
             storage_->hjm_deleted_vertices_.emplace_back(vertex->gid.AsUint());
             storage_->hjm_deleted_vertices.emplace_back(vertex);
@@ -2875,19 +2853,6 @@ utils::BasicResult<ConstraintViolation, void> Storage::Accessor::Commit(
               vertex->transaction_st=*commit_timestamp_;
             }
             if(transaction_.ve_changed.count(gid))vertex->ve_tt_ts=*commit_timestamp_;
-            // if(vertex->vertex_changed){
-            //   // vertex->transaction_st=commit_timestamp;
-            //   //transaction time
-            //   auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-            //   auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-            //   auto property_value = storage::PropertyValue((int64_t)commit_timestamp);
-            //   auto property_value2 = storage::PropertyValue((std::numeric_limits<int64_t>::max()));
-            //   vertex->properties.SetProperty(property_id2,property_value2);
-            //   vertex->properties.SetProperty(property_id,property_value);
-            // }
-            // if(vertex->ve_changed){
-            //   vertex->ve_tt_ts=commit_timestamp;//transaction_.transaction_id;//commit_timestamps;
-            // }
           }
           break;
         }
@@ -2895,16 +2860,6 @@ utils::BasicResult<ConstraintViolation, void> Storage::Accessor::Commit(
           storage::Edge *edge = prev.edge;
           edge->transaction_st=*commit_timestamp_;
           if(edge->deleted)  my_deleted_edges.push_back(edge->gid);
-          // commit_edges.insert(edge);
-          // std::lock_guard<utils::SpinLock> edge_guard(edge->lock);
-          // //transaction time
-          // auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-          // auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-          // auto property_value = storage::PropertyValue((int64_t)*commit_timestamp_);
-          // auto property_value2 = storage::PropertyValue(std::numeric_limits<int64_t>::max());
-          // edge->properties.SetProperty(property_id2,property_value2);
-          // edge->properties.SetProperty(property_id,property_value);
-          // if(edge->deleted)  my_deleted_edges.push_back(edge->gid);
           break;
         }
         case storage::PreviousPtr::Type::DELTA: {
@@ -2914,20 +2869,6 @@ utils::BasicResult<ConstraintViolation, void> Storage::Accessor::Commit(
         }
       }
     }
-
-    //save anchor info to kv; reset vertex flag;
-    // for(auto vertex:commit_vertices){
-    //   auto gid=vertex->gid;
-    //   if(transaction_.v_changed.count(gid)){
-    //     vertex->transaction_st=*commit_timestamp_;
-    //   }
-    //   if(transaction_.ve_changed.count(gid))vertex->ve_tt_ts=*commit_timestamp_;
-    // }
-    
-    // save edges' anchor info; reset edge flag;
-    // for(auto edge:commit_edges){
-    //   edge->transaction_st=*commit_timestamp_;
-    // }
     
     
   }else{//set realtime
@@ -2971,35 +2912,6 @@ utils::BasicResult<ConstraintViolation, void> Storage::Accessor::Commit(
 
   }
 
-  //hjm begin commit set vetex or edge timestamp
-  // for (auto &delta : transaction_.deltas) {
-  //   auto commit_timestamps=transaction_.commit_timestamp->load(std::memory_order_acquire);
-  //   switch (delta.action) {
-  //     case storage::Delta::Action::DELETE_OBJECT:
-  //     case storage::Delta::Action::RECREATE_OBJECT:
-  //     case storage::Delta::Action::SET_PROPERTY: //针对边的修改？
-  //     case storage::Delta::Action::ADD_LABEL:
-  //     case storage::Delta::Action::REMOVE_LABEL:{
-  //       break;
-  //     }
-  //     case storage::Delta::Action::ADD_OUT_EDGE:
-  //     case storage::Delta::Action::ADD_IN_EDGE:
-  //     case storage::Delta::Action::REMOVE_OUT_EDGE:
-  //     case storage::Delta::Action::REMOVE_IN_EDGE:{
-  //       if(storage_->config_.items.properties_on_edges){
-  //         auto maybe_edge=delta.vertex_edge.edge.ptr;
-  //         maybe_edge->transaction_st=commit_timestamps;
-  //       }
-  //       // auto commit_timestamp=transaction_.commit_timestamp->load(std::memory_order_acquire);
-  //       // auto maybe_edge=delta.vertex_edge.edge;
-  //       // std::cout<<"commit edge address:"<<&maybe_edge<<"\n";
-  //       // maybe_edge.transaction_st=commit_timestamp;
-  //       break;
-  //     } 
-  //   }
-  // }
-  // auto commit_timestamps=transaction_.commit_timestamp->load(std::memory_order_acquire);
-  // storage_->transaction_tables_[transaction_.transaction_id]=*commit_timestamp_;
   storage_->transaction_tables_.WithLock(
         [&](auto &transaction_tables) { transaction_tables[transaction_.transaction_id]=*commit_timestamp_; });
   
@@ -3451,9 +3363,6 @@ void Storage::CollectGarbage() {
   //hjm add begin;
   std::list<std::pair<Gid, LabelId>> saved_deltas;
   std::list<std::pair<Gid, Delta>> saved_deltas2;
-  // std::list<std::pair<std::tuple<Gid,uint64_t, uint64_t>, Delta>> saved_deltas;//store gid,start-timestamp commmit-timestamp
-  //hjm add end;
-  // saved_history_deltas_->SaveAnchorAll();//hjm edit
 
   std::ofstream ofs_edge;
   std::ofstream ofs_vertex;
@@ -3474,101 +3383,16 @@ void Storage::CollectGarbage() {
     if (commit_timestamp >= oldest_active_start_timestamp) {
       break;
     }
-    // transaction_tables_[transaction->transaction_id]=commit_timestamp;
-    // std::cout<<"test here:"<<transaction->transaction_id<<" "<<transaction->start_timestamp<<" "<<commit_timestamp<<std::endl;
-    
-    //hjm begin:save dead deltas to the kv store
     std::list<std::pair<uint64_t, std::list<Delta>>> saved_buffers;
     std::list<std::tuple<Gid,uint64_t,uint64_t>> saved_gids;
 
     for (Delta &a : transaction->deltas){
       auto start=a.transaction_st;
       auto commit=a.commit_timestamp;
-      // switch (a.action){
-      //   case storage::Delta::Action::ADD_OUT_EDGE:
-      //   case storage::Delta::Action::ADD_IN_EDGE:
-      //   case storage::Delta::Action::REMOVE_IN_EDGE:
-      //   case storage::Delta::Action::REMOVE_OUT_EDGE:{
-      //     start=a.ve_tt_ts;
-      //     commit=a.ve_tt_te;
-      //   }
-      //   default:break;
-      // }
-      // {   
-      //   std::cout<<"save before# gid:"<<std::to_string(a.gid.AsUint())<<" ts1:"<<std::to_string(a.transaction_st)<<" te "<<std::to_string(a.commit_timestamp);
-      //   if(a.to_gid) std::cout<<" to_gid:"<<std::to_string(a.to_gid->AsUint());
-      //   switch (a.action) {
-      //     case storage::Delta::Action::DELETE_OBJECT:{
-      //       std::cout<<" DELETE_OBJECT"<<std::endl;
-      //       break;
-      //     }
-      //     case storage::Delta::Action::RECREATE_OBJECT: {
-      //       std::cout<<"RECREATE_OBJECT:"<<a.add_info.dump()<<std::endl; 
-      //       break;
-      //     }
-      //     case storage::Delta::Action::SET_PROPERTY: {
-      //       std::cout<<"SET_PROPERTY"<< " property:"<<name_id_mapper_.IdToName(a.property.key.AsUint())<<std::endl;
-      //       break;
-      //     }
-      //     case storage::Delta::Action::ADD_LABEL:{
-      //       std::cout<<"ADD_LABEL:"<<name_id_mapper_.IdToName(a.label.AsUint())<<std::endl;
-      //     }
-      //     case storage::Delta::Action::REMOVE_LABEL: {
-      //       std::cout<<"REMOVE_LABEL"<<name_id_mapper_.IdToName(a.label.AsUint())<<std::endl;
-      //       break;
-      //     }
-      //     case storage::Delta::Action::ADD_OUT_EDGE:{
-      //       std::cout<<" ADD_OUT_EDGE: vertex"<<std::to_string(a.vertex_edge.vertex->gid.AsUint());
-      //       std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-      //       std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-      //       break;
-      //     }
-      //     case storage::Delta::Action::REMOVE_OUT_EDGE: {
-      //       std::cout<<"REMOVE_OUT_EDGE: vertex";//<<std::to_string(a.vertex_edge.vertex.gid.AsUint());
-      //       std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-      //       std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-      //       break;
-      //     }
-      //     case storage::Delta::Action::ADD_IN_EDGE:{
-      //       std::cout<<"ADD_IN_EDGE: vertex"<<std::to_string(a.vertex_edge.vertex->gid.AsUint());
-      //       std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-      //       std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-      //       break;
-      //     }
-      //     case storage::Delta::Action::REMOVE_IN_EDGE:{
-      //       std::cout<<"REMOVE_IN_EDGE: vertex"<<std::to_string(a.vertex_edge.vertex->gid.AsUint());
-      //       std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-      //       std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-      //       break;
-      //     }
-      //   }
-      // }
       if(a.transaction_st!=a.commit_timestamp){
         saved_history_deltas_->SaveDelta(a.gid,a.to_gid,start,commit,a,name_id_mapper_);
         saved_gids.emplace_back(a.gid,a.transaction_st,a.commit_timestamp);
       }
-      // auto prev = a.prev.Get();
-      // if(prev.type==PreviousPtr::Type::VERTEX){
-      //   Vertex *vertex = prev.vertex;
-      //   if(vertex->num>100){
-      //     std::cout<<"collect garbage: vertex's num"<<vertex->num<<"\n";
-      //     vertex->num=1;
-      //     //save anchor info to kv
-      //     auto labels=vertex->labels;
-      //     auto properties=vertex->properties.Properties();
-      //     saved_history_deltas_->SaveVertexAnchor(vertex->gid,vertex->transaction_st,labels,properties,name_id_mapper_);
-      //   }
-      // }
-      // if(prev.type==PreviousPtr::Type::EDGE){
-      //   Edge *edge = prev.edge; 
-      //   if(edge->num>100){
-      //     std::cout<<"collect garbage here: edge's num "<<edge->gid.AsUint()<<" "<<edge->num<<"\n";
-      //     edge->num=1;
-      //     //save anchor info to kv
-      //     auto properties=edge->properties.Properties();
-      //     saved_history_deltas_->SaveEdgeAnchor(edge->gid,edge->transaction_st,properties,name_id_mapper_);
-      //   }
-      // }
     }
 
     std::map<std::string, std::string> gid_anchor_all_;
@@ -3633,13 +3457,6 @@ void Storage::CollectGarbage() {
       auto print_ts=std::to_string(ts);
       auto write_string=gid+"####"+print_fgid+"####"+print_tgid+"####"+print_ts+"####"+label+"####"+props+"\n";
       ofs_edge<<write_string;
-      //ts labels props
-      // std::cout<<"save edge:"<<print_key1<<" edge_type:"<<label<<" props:"<<props<<" "<<print_key2<<"\n";
-      // auto sql="Match (n),(m) Where id(n)="+std::to_string(f_gid)+" and id(m)="+std::to_string(t_gid)
-      //     +" With n,m Create (n)-[r:"+label+"]->(m) set r.transaction_ts="+std::to_string(ts)+",";
-      // if(props!="") sql+=props;
-      // // sql="[\""+sql+";\"],{}"
-      // std::cout<<"create sql here:"<<maybe_properties.size()<<" "<<sql<<"\n";
     }
    
     for(auto key:transaction->prinfVertex_){
@@ -3663,12 +3480,6 @@ void Storage::CollectGarbage() {
       auto print_key1=std::to_string(gid)+":"+std::to_string(ts);
       auto write_string=std::to_string(gid)+"####"+std::to_string(ts)+"####"+labels+"####"+props+"\n";
       ofs_vertex<<write_string;
-      // std::cout<<"save vertex:"<<print_key1<<" labels:"<<labels<<" props:"<<props<<"\n";
-      // auto sql="Match (n),(m) Where id(n)="+std::to_string(f_gid)+" and id(m)="+std::to_string(t_gid)
-      //     +" With n,m Create (n)-[r:"+label+"]->(m) set r.transaction_ts="+std::to_string(ts)+",";
-      // if(props!="") sql+=props;
-      // sql="[\""+sql+";\"],{}"
-      // std::cout<<"create sql here:"<<maybe_properties.size()<<" "<<sql<<"\n";
     }
     
     //hjm end
@@ -3754,9 +3565,6 @@ void Storage::CollectGarbage() {
             edge->delta = nullptr; 
             if (edge->deleted) {
               current_deleted_edges.push_back(edge->gid);
-              // auto gids=edge->gid;
-              // std::cout<<"delte edge";//<<delta.gid.AsUnit()<<std::endl;
-              // std::cout<<"delte edge"<<(edge.gid).AsUnit()<<std::endl;
             }
             break;
           }
@@ -3855,113 +3663,13 @@ void Storage::CollectGarbage() {
     // if force is set to true we can simply delete all the leftover undos because
     // no transaction is active
     if constexpr (force) {
-       //hjm begin
-        // for(auto &[timestamp, deltas] : undo_buffers){
-        //   for (Delta &a : deltas) {
-        //     if(a.transaction_st<a.commit_timestamp){
-        //       saved_history_deltas_->SaveDelta(a.gid,a.to_gid,a.transaction_st,a.commit_timestamp,a,name_id_mapper_);
-        //       saved_gids.emplace_back(a.gid,a.transaction_st,a.commit_timestamp);
-        //     }
-        //   }
-        // }
-        //hjm end
         undo_buffers.clear();
     } else {
       while (!undo_buffers.empty() && undo_buffers.front().first <= oldest_active_start_timestamp) {
-        //hjm begin
-        // auto &[timestamp, deltas]=undo_buffers.front();
-        // for(auto &[timestamp, deltas] : undo_buffers)
-        // {
-        //   for (Delta &a : deltas) {
-        //     {   
-        //         std::cout<<"save before# gid:"<<std::to_string(a.gid.AsUint())<<" ts1:"<<std::to_string(a.transaction_st)<<" te "<<std::to_string(a.commit_timestamp);
-        //         if(a.to_gid) std::cout<<" to_gid:"<<std::to_string(a.to_gid->AsUint());
-        //         switch (a.action) {
-        //           case storage::Delta::Action::DELETE_OBJECT:{
-        //             std::cout<<" DELETE_OBJECT"<<std::endl;
-        //             break;
-        //           }
-        //           case storage::Delta::Action::RECREATE_OBJECT: {
-        //             std::cout<<"RECREATE_OBJECT"<<std::endl; 
-        //             break;
-        //           }
-        //           case storage::Delta::Action::SET_PROPERTY: {
-        //             std::cout<<"SET_PROPERTY"<< " property:"<<name_id_mapper_.IdToName(a.property.key.AsUint())<<std::endl;
-        //             break;
-        //           }
-        //           case storage::Delta::Action::ADD_LABEL:{
-        //             std::cout<<"ADD_LABEL:"<<name_id_mapper_.IdToName(a.label.AsUint())<<std::endl;
-        //           }
-        //           case storage::Delta::Action::REMOVE_LABEL: {
-        //             std::cout<<"REMOVE_LABEL"<<name_id_mapper_.IdToName(a.label.AsUint())<<std::endl;
-        //             break;
-        //           }
-        //           case storage::Delta::Action::ADD_OUT_EDGE:{
-        //             std::cout<<" ADD_OUT_EDGE: vertex"<<std::to_string(a.vertex_edge.vertex->gid.AsUint());
-        //             std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-        //             std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-        //             break;
-        //           }
-        //           case storage::Delta::Action::REMOVE_OUT_EDGE: {
-        //             std::cout<<"REMOVE_OUT_EDGE: vertex";//<<std::to_string(a.vertex_edge.vertex.gid.AsUint());
-        //             std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-        //             std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-        //             break;
-        //           }
-        //           case storage::Delta::Action::ADD_IN_EDGE:{
-        //             std::cout<<"ADD_IN_EDGE: vertex"<<std::to_string(a.vertex_edge.vertex->gid.AsUint());
-        //             std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-        //             std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-        //             break;
-        //           }
-        //           case storage::Delta::Action::REMOVE_IN_EDGE:{
-        //             std::cout<<"REMOVE_IN_EDGE: vertex"<<std::to_string(a.vertex_edge.vertex->gid.AsUint());
-        //             std::cout<<" edge:"<<std::to_string(a.vertex_edge.edge.ptr->gid.AsUint());
-        //             std::cout<<" edge type"<<name_id_mapper_.IdToName(a.vertex_edge.edge_type.AsUint())<<std::endl;
-        //             break;
-        //           }
-        //         }
-        //     }
-        //     if(a.transaction_st<a.commit_timestamp){
-        //       saved_history_deltas_->SaveDelta(a.gid,a.to_gid,a.transaction_st,a.commit_timestamp,a,name_id_mapper_);
-        //       saved_gids.emplace_back(a.gid,a.transaction_st,a.commit_timestamp);
-        //     }
-        //   }
-        // }
-        // //hjm end
          undo_buffers.pop_front();
       }
     }
   });
-  // hjm begin test 
-  saved_history_deltas_->SaveTimeTableAll();
-  // saved_history_deltas_->SaveAnchorAll();
-  // saved_history_deltas_->SaveDeltaAll();
-  // saved_history_deltas_->SaveAnchorAll(gid_anchor_all_);
-  // saved_history_deltas_->SaveDeltaAll();
-  // saved_history_deltas_->GetAll();
-
-  // auto his_info=saved_history_deltas_->GetAllDeltas(0,100,"from to");
-  // for(auto [key,values]:his_info){
-  //   std::cout<<"history here:"<<std::to_string(key)<<"\n";
-  //   for(auto value:values){
-  //     std::cout<<" value info"<<value.dump()<<"\n";
-  //   }
-  // }
-  
-  // }
-  //  for (auto &[gid,a]:saved_deltas) {
-  //     // auto [gid, start, commit] = b;
-  //     std::cout<<"hjm gid"<<gid.AsUint()<<std::endl;//" "<<start<<" "<<commit<<std::endl;
-  //     std::cout<<"hjm delta label"<<a.AsUint()<<std::endl;
-  //     // std::cout<<"hjm delta property value"<<a.property.key.AsUint()<<std::endl;
-  // }
-
-  // for (auto [a,start,commit]:saved_gids) {
-  //     // std::cout<<"hjm gid#"<<"gid:"+std::to_string(a.AsUint())<<std::endl;//" "<<start<<" "<<commit<<std::endl;
-  //   saved_history_deltas_->GetDelta(std::to_string(a.AsUint())+ ":"+std::to_string(start)+":"+std::to_string(commit));
-  // }
-  // hjm end
   {
     auto vertex_acc = vertices_.access();
     if constexpr (force) {

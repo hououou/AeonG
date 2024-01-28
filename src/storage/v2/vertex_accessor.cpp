@@ -75,25 +75,14 @@ namespace {
 }  // namespace
 }  // namespace help
 
-//hjm begin
 std::optional<VertexAccessor> VertexAccessor::Creates(Vertex *vertex, Transaction *transaction, Indices *indices,
                                                      Constraints *constraints, Config::Items config, View view){
 
-  // auto vertex = new Vertex(another.vertex_->gid,another.vertex_->delta,another.vertex_->transaction_st);
   const auto [exists, deleted] = detail::IsVisible(vertex, transaction, view);
   if(!exists) return std::nullopt;
-  // auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  // auto property_value = storage::PropertyValue((int64_t)vertex->transaction_st);
-  // vertex->properties.SetProperty(property_id,property_value);
-
-  // auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  // auto property_value2 = storage::PropertyValue((int64_t)deltas->commit_timestamp);
-  // vertex->properties.SetProperty(property_id2,property_value2);
-
-  // vertex->properties=another.vertex_->properties;
   return VertexAccessor{vertex,transaction, indices, constraints, config};
 }
-//hjm end
+
 
 std::optional<VertexAccessor> VertexAccessor::Create(Vertex *vertex, Transaction *transaction, Indices *indices,
                                                      Constraints *constraints, Config::Items config, View view) {
@@ -116,8 +105,8 @@ Result<bool> VertexAccessor::AddLabel(LabelId label) {
   if (!PrepareForWrite(transaction_, vertex_)) return Error::SERIALIZATION_ERROR;
 
   if (vertex_->deleted) return Error::DELETED_OBJECT;
-  
-  //hjm begin set transaction st
+
+  //set transaction set
   auto ts=vertex_->transaction_st;
   auto before_delta=vertex_->delta;
   bool printf=before_delta == nullptr?true:false;
@@ -139,14 +128,12 @@ Result<bool> VertexAccessor::AddLabel(LabelId label) {
     }  
     ts = before_delta->timestamp->load(std::memory_order_acquire);
     if(ts >= kTransactionInitialId){
-      if(ts==transaction_->transaction_id){//ts >= kTransactionInitialId & 
+      if(ts==transaction_->transaction_id){
         ts=before_delta->transaction_st;
       }else{
-        std::cout<<"SERIALIZATION_ERROR"<<ts<<" "<<transaction_->transaction_id<<"\n";
         return Error::SERIALIZATION_ERROR;
       }
-    }else{//前一个delta提交了 全量提交
-      // std::cout<<"edge commit:"<<ts<<" "<<edge_.ptr->num<<"\n";
+    }else{
       vertex_->num+=1;
       if(!MultipleAnchorFlag){//constant anchor num
         if(vertex_->num>config_.AnchorNum){
@@ -160,7 +147,6 @@ Result<bool> VertexAccessor::AddLabel(LabelId label) {
           }
         }
       }else{
-
       }
       printf=true;
     }
@@ -172,7 +158,6 @@ Result<bool> VertexAccessor::AddLabel(LabelId label) {
     auto print=prinfVertex(vertex_->gid.AsUint(),ts,maybe_properties,maybe_labels);
     transaction_->prinfVertex_.emplace_back(print);
   }
-  //hjm end
 
   if (std::find(vertex_->labels.begin(), vertex_->labels.end(), label) != vertex_->labels.end()) return false;
 
@@ -180,11 +165,9 @@ Result<bool> VertexAccessor::AddLabel(LabelId label) {
 
   vertex_->labels.push_back(label);
 
-  //hjm begin
-  // vertex_->vertex_changed=true;
+  //set for aeong time
   transaction_->v_changed.insert(vertex_->gid);
   delta->transaction_st = ts;
-  //hjm end
 
   UpdateOnAddLabel(indices_, label, vertex_, *transaction_);
 
@@ -198,7 +181,7 @@ Result<bool> VertexAccessor::RemoveLabel(LabelId label) {
 
   if (vertex_->deleted) return Error::DELETED_OBJECT;
   
-  //hjm begin set transaction st
+  //aeong set transaction st
   auto ts=vertex_->transaction_st;
   auto before_delta=vertex_->delta;
   bool printf=before_delta == nullptr?true:false;
@@ -223,15 +206,12 @@ Result<bool> VertexAccessor::RemoveLabel(LabelId label) {
       if(ts==transaction_->transaction_id){//ts >= kTransactionInitialId & 
         ts=before_delta->transaction_st;
       }else{
-        std::cout<<"SERIALIZATION_ERROR"<<ts<<" "<<transaction_->transaction_id<<"\n";
         return Error::SERIALIZATION_ERROR;
       }
-    }else{//前一个delta提交了 全量提交
-      // std::cout<<"edge commit:"<<ts<<" "<<edge_.ptr->num<<"\n";
+    }else{
       vertex_->num+=1;
       if(vertex_->num>config_.AnchorNum){
         vertex_->num=1;
-        // save edge to restore properties
         if(AnchorFlag){
           auto maybe_labels = vertex_->labels;
           auto maybe_properties = vertex_->properties.Properties();
@@ -249,27 +229,16 @@ Result<bool> VertexAccessor::RemoveLabel(LabelId label) {
     auto print=prinfVertex(vertex_->gid.AsUint(),ts,maybe_properties,maybe_labels);
     transaction_->prinfVertex_.emplace_back(print);
   }
-  //hjm end
+
 
   auto it = std::find(vertex_->labels.begin(), vertex_->labels.end(), label);
   if (it == vertex_->labels.end()) return false;
 
   auto delta=CreateAndLinkDelta(transaction_, vertex_, Delta::AddLabelTag(), label);
-  
-  //hjm begin
-  // delta->commit_timestamp=transaction_->transaction_id;
-  // auto older = delta->next.load(std::memory_order_acquire);
-  // auto tt=vertex_->transaction_st;
-  // if (older != nullptr){
-  //   if(tt==transaction_->transaction_id) tt=older->transaction_st;
-  // }
-  // delta->transaction_st =tt;
-  // // vertex_->transaction_st=transaction_->transaction_id;
-  // vertex_->vertex_changed=true;
-  // vertex_->transaction_st=transaction_->transaction_id;
+
+  //aeong set for transaction
   transaction_->v_changed.insert(vertex_->gid);
   delta->transaction_st = ts!=0? ts: vertex_->transaction_st;
-  //hjm end
 
   std::swap(*it, *vertex_->labels.rbegin());
   vertex_->labels.pop_back();
@@ -380,7 +349,7 @@ Result<PropertyValue> VertexAccessor::SetProperty(PropertyId property, const Pro
   if (!PrepareForWrite(transaction_, vertex_)) return Error::SERIALIZATION_ERROR;
 
   if (vertex_->deleted) return Error::DELETED_OBJECT;
-  //hjm begin set transaction st
+  //aeong set transaction st
   auto ts=vertex_->transaction_st;
   auto before_delta=vertex_->delta;
   bool printf=before_delta == nullptr?true:false;
@@ -405,39 +374,20 @@ Result<PropertyValue> VertexAccessor::SetProperty(PropertyId property, const Pro
       if(ts==transaction_->transaction_id){//ts >= kTransactionInitialId & 
         ts=before_delta->transaction_st;
       }else{
-        std::cout<<"SERIALIZATION_ERROR"<<ts<<" "<<transaction_->transaction_id<<"\n";
         return Error::SERIALIZATION_ERROR;
       }
-    }else{//前一个delta提交了 全量提交
-      // vertex_->num+=1;
-      // std::cout<<"num:"<<vertex_->num<<"\n";
+    }else{
       if(!MultipleAnchorFlag){//constant anchor num
         if(vertex_->num>config_.AnchorNum){
           vertex_->num=1;
-          // save edge to restore properties
           if(AnchorFlag){
             auto maybe_labels = vertex_->labels;
             auto maybe_properties = vertex_->properties.Properties();
             ts = before_delta->commit_timestamp;
-            // if(vertex_->gid.AsUint()==941){
-            //   std::cout<<"create anchor here"<<std::to_string(vertex_->gid.AsUint())<<" "<<ts<<"\n";
-            // }
             transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
           }
         }
-      }else{//multiple anchor nums
-        auto position=help::FindPosition(HotNumLists,vertex_->num);
-        auto self_anchor=AnchorNumLists[position];
-        std::cout<<"num:"<<vertex_->num<<"\n";
-        std::cout<<"position:"<<position<<" self_anchor:"<<self_anchor<<"\n";
-        if((vertex_->num)%(self_anchor+1)==0 && AnchorFlag){
-          std::cout<<"create anchor here\n";
-          std::cout<<"gid:"<<std::to_string(vertex_->gid.AsUint())<<" ts:"<<std::to_string(ts)<<"\n";
-          auto maybe_labels = vertex_->labels;
-          auto maybe_properties = vertex_->properties.Properties();
-          ts = before_delta->commit_timestamp;
-          transaction_->gid_anchor_vertex_[std::make_pair(vertex_->gid,ts)]=std::make_pair(maybe_properties,maybe_labels);
-        }
+      }else{
       }
       printf=true;
     }
@@ -449,7 +399,7 @@ Result<PropertyValue> VertexAccessor::SetProperty(PropertyId property, const Pro
     auto print=prinfVertex(vertex_->gid.AsUint(),ts,maybe_properties,maybe_labels);
     transaction_->prinfVertex_.emplace_back(print);
   }
-  //hjm end
+
   auto current_value = vertex_->properties.GetProperty(property);
   // We could skip setting the value if the previous one is the same to the new
   // one. This would save some memory as a delta would not be created as well as
@@ -460,24 +410,11 @@ Result<PropertyValue> VertexAccessor::SetProperty(PropertyId property, const Pro
   auto delta=CreateAndLinkDelta(transaction_, vertex_, Delta::SetPropertyTag(), property, current_value);
   vertex_->properties.SetProperty(property, value);
   vertex_->num+=1;
-  //hjm begin
-  // delta->commit_timestamp=transaction_->transaction_id;
-  // auto older = delta->next.load(std::memory_order_acquire);
-  // auto tt=vertex_->transaction_st;
-  // if (older != nullptr){
-  //   if(tt==transaction_->transaction_id) tt=older->transaction_st;
-  // }
-  // delta->transaction_st =tt;
-  // // std::cout<<"delta info:"<<tt<<" "<<delta->commit_timestamp<<"\n";
-  // // vertex_->transaction_st=transaction_->transaction_id;
-  // vertex_->vertex_changed=true;
-  // vertex_->transaction_st=transaction_->transaction_id;
+
+  //aeong set for transaction
   transaction_->v_changed.insert(vertex_->gid);
-  // delta->transaction_st = ts;
   delta->transaction_st = vertex_->transaction_st;//ts;
-  // delta->commit_timestamp=(uint64_t)std::numeric_limits<int64_t>::max();
-  // vertex_->transaction_st=(uint64_t)std::numeric_limits<int64_t>::max()-1;
-  //hjm end
+
   UpdateOnSetProperty(indices_, property, value, vertex_, *transaction_);
 
   return std::move(current_value);
@@ -489,7 +426,7 @@ Result<std::map<PropertyId, PropertyValue>> VertexAccessor::ClearProperties() {
   if (!PrepareForWrite(transaction_, vertex_)) return Error::SERIALIZATION_ERROR;
 
   if (vertex_->deleted) return Error::DELETED_OBJECT;
-  //hjm begin set transaction st
+  //aeong set transaction st
   auto ts=vertex_->transaction_st;
   auto before_delta=vertex_->delta;
   bool printf=before_delta == nullptr?true:false;
@@ -514,12 +451,10 @@ Result<std::map<PropertyId, PropertyValue>> VertexAccessor::ClearProperties() {
       if(ts==transaction_->transaction_id){//ts >= kTransactionInitialId & 
         ts=before_delta->transaction_st;
       }else{
-        std::cout<<"SERIALIZATION_ERROR"<<ts<<" "<<transaction_->transaction_id<<"\n";
         return Error::SERIALIZATION_ERROR;
       }
-    }else{//前一个delta提交了 全量提交
-      // std::cout<<"edge commit:"<<ts<<" "<<edge_.ptr->num<<"\n";
-      vertex_->num+=1;
+    }else{
+        vertex_->num+=1;
       if(vertex_->num>config_.AnchorNum){
         vertex_->num=1;
         // save edge to restore properties
@@ -540,26 +475,24 @@ Result<std::map<PropertyId, PropertyValue>> VertexAccessor::ClearProperties() {
     auto print=prinfVertex(vertex_->gid.AsUint(),ts,maybe_properties,maybe_labels);
     transaction_->prinfVertex_.emplace_back(print);
   }
-  //hjm end
+
   auto properties = vertex_->properties.Properties();
   for (const auto &property : properties) {
     auto delta=CreateAndLinkDelta(transaction_, vertex_, Delta::SetPropertyTag(), property.first, property.second);
-    //hjm begin
+    //set for aeong
     delta->transaction_st = ts;
-    //hjm end
     UpdateOnSetProperty(indices_, property.first, PropertyValue(), vertex_, *transaction_);
   }
 
-  //hjm begin
+  //set for aeong
   transaction_->v_changed.insert(vertex_->gid);
-  //hjm end
 
   vertex_->properties.ClearProperties();
 
   return std::move(properties);
 }
 
-//hjm begin
+
 Result<std::map<PropertyId, PropertyValue>> VertexAccessor::ClearProperties2() {
   auto properties = vertex_->properties.Properties();
   vertex_->properties.ClearProperties();
@@ -579,14 +512,13 @@ void VertexAccessor::propsizes(){
   for (auto [keys,id]:properties){
     std::cout<<"prop info here:"<<keys.AsUint()<<std::endl;
   }
-  //  return vertex_->properties.Properties().size();
 }
 
 Delta *VertexAccessor::getDeltas(){
   return vertex_->delta;
 }
 
-//hjm end
+
 Result<PropertyValue> VertexAccessor::GetProperty(PropertyId property, View view) const {
   bool exists = true;
   bool deleted = false;
@@ -838,168 +770,6 @@ Result<std::vector<EdgeAccessor>> VertexAccessor::OutEdges(View view, const std:
   }
   return std::move(ret);
 }
-
-
-// Result<std::vector<EdgeAccessor>> VertexAccessor::InEdges(View view, const std::vector<EdgeTypeId> &edge_types,
-//                                                           Gid existing_gid) const {
-//   // MG_ASSERT(!destination || destination->transaction_ == transaction_, "Invalid accessor!");
-//   bool exists = true;
-//   bool deleted = false;
-//   std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> in_edges;
-//   Delta *delta = nullptr;
-//   {
-//     std::lock_guard<utils::SpinLock> guard(vertex_->lock);
-//     deleted = vertex_->deleted;
-//     if (edge_types.empty() && !destination) {
-//       in_edges = vertex_->in_edges;
-//     } else {
-//       for (const auto &item : vertex_->in_edges) {
-//         const auto &[edge_type, from_vertex, edge] = item;
-//         if (destination && from_vertex != destination->vertex_) continue;
-//         if (!edge_types.empty() && std::find(edge_types.begin(), edge_types.end(), edge_type) == edge_types.end())
-//           continue;
-//         in_edges.push_back(item);
-//       }
-//     }
-//     delta = vertex_->delta;
-//   }
-//   ApplyDeltasForRead(
-//       transaction_, delta, view, [&exists, &deleted, &in_edges, &edge_types, &destination](const Delta &delta) {
-//         switch (delta.action) {
-//           case Delta::Action::ADD_IN_EDGE: {
-//             if (destination && delta.vertex_edge.vertex != destination->vertex_) break;
-//             if (!edge_types.empty() &&
-//                 std::find(edge_types.begin(), edge_types.end(), delta.vertex_edge.edge_type) == edge_types.end())
-//               break;
-//             // Add the edge because we don't see the removal.
-//             std::tuple<EdgeTypeId, Vertex *, EdgeRef> link{delta.vertex_edge.edge_type, delta.vertex_edge.vertex,
-//                                                            delta.vertex_edge.edge};
-//             auto it = std::find(in_edges.begin(), in_edges.end(), link);
-//             MG_ASSERT(it == in_edges.end(), "Invalid database state!");
-//             in_edges.push_back(link);
-//             break;
-//           }
-//           case Delta::Action::REMOVE_IN_EDGE: {
-//             if (destination && delta.vertex_edge.vertex != destination->vertex_) break;
-//             if (!edge_types.empty() &&
-//                 std::find(edge_types.begin(), edge_types.end(), delta.vertex_edge.edge_type) == edge_types.end())
-//               break;
-//             // Remove the label because we don't see the addition.
-//             std::tuple<EdgeTypeId, Vertex *, EdgeRef> link{delta.vertex_edge.edge_type, delta.vertex_edge.vertex,
-//                                                            delta.vertex_edge.edge};
-//             auto it = std::find(in_edges.begin(), in_edges.end(), link);
-//             MG_ASSERT(it != in_edges.end(), "Invalid database state!");
-//             std::swap(*it, *in_edges.rbegin());
-//             in_edges.pop_back();
-//             break;
-//           }
-//           case Delta::Action::DELETE_OBJECT: {
-//             exists = false;
-//             break;
-//           }
-//           case Delta::Action::RECREATE_OBJECT: {
-//             deleted = false;
-//             break;
-//           }
-//           case Delta::Action::ADD_LABEL:
-//           case Delta::Action::REMOVE_LABEL:
-//           case Delta::Action::SET_PROPERTY:
-//           case Delta::Action::ADD_OUT_EDGE:
-//           case Delta::Action::REMOVE_OUT_EDGE:
-//             break;
-//         }
-//       });
-//   if (!exists) return Error::NONEXISTENT_OBJECT;
-//   if (deleted) return Error::DELETED_OBJECT;
-//   std::vector<EdgeAccessor> ret;
-//   ret.reserve(in_edges.size());
-//   for (const auto &item : in_edges) {
-//     const auto &[edge_type, from_vertex, edge] = item;
-//     ret.emplace_back(edge, edge_type, from_vertex, vertex_, transaction_, indices_, constraints_, config_);
-//   }
-//   return std::move(ret);
-// }
-
-
-// Result<std::vector<EdgeAccessor>> VertexAccessor::OutEdges(View view, const std::vector<EdgeTypeId> &edge_types,
-//                                                            const VertexAccessor *destination) const {
-//   MG_ASSERT(!destination || destination->transaction_ == transaction_, "Invalid accessor!");
-//   bool exists = true;
-//   bool deleted = false;
-//   std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> out_edges;
-//   Delta *delta = nullptr;
-//   {
-//     std::lock_guard<utils::SpinLock> guard(vertex_->lock);
-//     deleted = vertex_->deleted;
-//     if (edge_types.empty() && !destination) {
-//       out_edges = vertex_->out_edges;
-//     } else {
-//       for (const auto &item : vertex_->out_edges) {
-//         const auto &[edge_type, to_vertex, edge] = item;
-//         if (destination && to_vertex != destination->vertex_) continue;
-//         if (!edge_types.empty() && std::find(edge_types.begin(), edge_types.end(), edge_type) == edge_types.end())
-//           continue;
-//         out_edges.push_back(item);
-//       }
-//     }
-//     delta = vertex_->delta;
-//   }
-//   ApplyDeltasForRead(
-//       transaction_, delta, view, [&exists, &deleted, &out_edges, &edge_types, &destination](const Delta &delta) {
-//         switch (delta.action) {
-//           case Delta::Action::ADD_OUT_EDGE: {
-//             if (destination && delta.vertex_edge.vertex != destination->vertex_) break;
-//             if (!edge_types.empty() &&
-//                 std::find(edge_types.begin(), edge_types.end(), delta.vertex_edge.edge_type) == edge_types.end())
-//               break;
-//             // Add the edge because we don't see the removal.
-//             std::tuple<EdgeTypeId, Vertex *, EdgeRef> link{delta.vertex_edge.edge_type, delta.vertex_edge.vertex,
-//                                                            delta.vertex_edge.edge};
-//             auto it = std::find(out_edges.begin(), out_edges.end(), link);
-//             MG_ASSERT(it == out_edges.end(), "Invalid database state!");
-//             out_edges.push_back(link);
-//             break;
-//           }
-//           case Delta::Action::REMOVE_OUT_EDGE: {
-//             if (destination && delta.vertex_edge.vertex != destination->vertex_) break;
-//             if (!edge_types.empty() &&
-//                 std::find(edge_types.begin(), edge_types.end(), delta.vertex_edge.edge_type) == edge_types.end())
-//               break;
-//             // Remove the label because we don't see the addition.
-//             std::tuple<EdgeTypeId, Vertex *, EdgeRef> link{delta.vertex_edge.edge_type, delta.vertex_edge.vertex,
-//                                                            delta.vertex_edge.edge};
-//             auto it = std::find(out_edges.begin(), out_edges.end(), link);
-//             MG_ASSERT(it != out_edges.end(), "Invalid database state!");
-//             std::swap(*it, *out_edges.rbegin());
-//             out_edges.pop_back();
-//             break;
-//           }
-//           case Delta::Action::DELETE_OBJECT: {
-//             exists = false;
-//             break;
-//           }
-//           case Delta::Action::RECREATE_OBJECT: {
-//             deleted = false;
-//             break;
-//           }
-//           case Delta::Action::ADD_LABEL:
-//           case Delta::Action::REMOVE_LABEL:
-//           case Delta::Action::SET_PROPERTY:
-//           case Delta::Action::ADD_IN_EDGE:
-//           case Delta::Action::REMOVE_IN_EDGE:
-//             break;
-//         }
-//       });
-//   if (!exists) return Error::NONEXISTENT_OBJECT;
-//   if (deleted) return Error::DELETED_OBJECT;
-//   std::vector<EdgeAccessor> ret;
-//   ret.reserve(out_edges.size());
-//   for (const auto &item : out_edges) {
-//     const auto &[edge_type, to_vertex, edge] = item;
-//     ret.emplace_back(edge, edge_type, vertex_, to_vertex, transaction_, indices_, constraints_, config_);
-//   }
-//   return std::move(ret);
-// }
 
 Result<size_t> VertexAccessor::InDegree(View view) const {
   bool exists = true;

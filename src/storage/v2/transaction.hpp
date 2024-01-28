@@ -29,7 +29,6 @@ namespace storage {
 
 const uint64_t kTimestampInitialId = 0;
 const uint64_t kTransactionInitialId = 1ULL << 63U;
-// const int NUM=11;
 const std::vector<int> AnchorNumLists{10,100,1000};//{2,4,7};//{10,100,1000};
 const std::vector<int> HotNumLists{1000,10000,100000};//{1k 10k 100k 2*2+2+1,32,62};//{1000,10000,100000}; (num+1)*anchor_num+1
 const bool MultipleAnchorFlag=false;//false;//true
@@ -41,8 +40,6 @@ struct prinfEdge{
     edge_type_=edge_type;
     gid_=gid;
     f_gid_=f_gid;
-    // f_ts_=f_ts;
-    // t_ts_=t_ts;
     t_gid_=t_gid;
     tt_ts_=tt_ts;
     props_=props;
@@ -50,9 +47,7 @@ struct prinfEdge{
   EdgeTypeId edge_type_;
   uint64_t gid_;
   uint64_t f_gid_;
-  // uint64_t f_ts_;
   uint64_t t_gid_;
-  // uint64_t t_ts_;
   uint64_t tt_ts_;
   std::map<PropertyId, PropertyValue> props_;
 };
@@ -61,14 +56,11 @@ struct prinfVertex{
   prinfVertex(uint64_t gid,uint64_t tt_ts,std::map<PropertyId, PropertyValue> props,std::vector<LabelId> labels){
     gid_=gid;
     tt_ts_=tt_ts;
-    // tt_te_=tt_te;
-    // edges_id_=edges_id;
     props_=props;
     labels_=labels;
   }
   uint64_t gid_;
   uint64_t tt_ts_;
-  // uint64_t tt_te_;
   std::vector<uint64_t> edges_id_;
   std::map<PropertyId, PropertyValue> props_;
   std::vector<LabelId> labels_;
@@ -81,8 +73,6 @@ struct Transaction {
         command_id(0),
         must_abort(false),
         isolation_level(isolation_level) {
-          // vertex_changed=false;
-          // ve_changed=false;
         }
 
   Transaction(Transaction &&other) noexcept
@@ -99,8 +89,6 @@ struct Transaction {
           prinfVertex_=other.prinfVertex_;
           v_changed=other.v_changed;
           ve_changed=other.ve_changed;
-          // vertex_changed=false;
-          // ve_changed=false;
         }
 
   Transaction(const Transaction &) = delete;
@@ -127,23 +115,13 @@ struct Transaction {
   bool must_abort;
   IsolationLevel isolation_level;
 
-  //hjm begin
-  // std::map<std::string, std::string> gid_anchor_all_;
-  // std::map<std::string, std::string> gid_anchor_vertex_;
+
   std::set<Gid> v_changed;
   std::set<Gid> ve_changed;
   std::map<std::pair<Gid,uint64_t>, std::pair<std::map<PropertyId, PropertyValue>,std::vector<LabelId>>> gid_anchor_vertex_;
-  std::map<std::pair<Gid,uint64_t>, std::map<PropertyId, PropertyValue>> gid_anchor_edge_;//edge_gid,tt_ts;props
-  
-  //printf
+  std::map<std::pair<Gid,uint64_t>, std::map<PropertyId, PropertyValue>> gid_anchor_edge_;
   std::vector<prinfEdge> prinfEdge_;
   std::vector<prinfVertex> prinfVertex_;
-  //gid,<fgid,tgid,props>
-  // std::map<uint64_t, std::pair<std::pair<uint64_t,uint64_t>,std::map<PropertyId, PropertyValue>>> printf_anchor_edge_;
-  //gid,set<edge_ids>,set<labels>,props
-  // std::map<uint64_t, std::tuple<std::vector<uint64_t>,std::vector<LabelId>,std::map<PropertyId, PropertyValue>>> printf_anchor_vertex_;
-
-  //hjm end
 
 };
 
