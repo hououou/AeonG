@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/antlr4" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/antlr4/runtime/Cpp/src/antlr4-proj-build/runtime/thirdparty/utfcpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/antlr4/runtime/Cpp/src/antlr4-proj-build/runtime/thirdparty/utfcpp/extern/ftest" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/benchmark" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/cppitertools" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/googletest" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/libbcrypt" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/librdkafka" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/librdtsc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/mgclient" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/mgconsole" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/protobuf" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/pulsar" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/pymgclient" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/rapidcheck" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/rocksdb" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libs/spdlog" vcs="Git" />
+  </component>
+</project>

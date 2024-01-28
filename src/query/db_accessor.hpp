@@ -1,0 +1,610 @@
+// Copyright 2021 Memgraph Ltd.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt; by using this file, you agree to be bound by the terms of the Business Source
+// License, and you may not use this file except in compliance with the Business Source License.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+#pragma once
+
+#include <optional>
+
+#include <cppitertools/filter.hpp>
+#include <cppitertools/imap.hpp>
+
+#include "query/exceptions.hpp"
+
+#include "storage/v2/id_types.hpp"
+#include "storage/v2/property_value.hpp"
+#include "storage/v2/result.hpp"
+
+///////////////////////////////////////////////////////////
+// Our communication layer and query engine don't mix
+// very well on Centos because OpenSSL version avaialable
+// on Centos 7 include  libkrb5 which has brilliant macros
+// called TRUE and FALSE. For more detailed explanation go
+// to memgraph.cpp.
+//
+// Because of the replication storage now uses some form of
+// communication so we have some unwanted macros.
+// This cannot be avoided by simple include orderings so we
+// simply undefine those macros as we're sure that libkrb5
+// won't and can't be used anywhere in the query engine.
+#include "storage/v2/storage.hpp"
+
+#undef FALSE
+#undef TRUE
+///////////////////////////////////////////////////////////
+
+#include "storage/v2/view.hpp"
+#include "utils/bound.hpp"
+#include "utils/exceptions.hpp"
+
+
+namespace query {
+
+class VertexAccessor;
+
+class EdgeAccessor final {
+ public:
+  storage::EdgeAccessor impl_;
+
+ public:
+  explicit EdgeAccessor(storage::EdgeAccessor impl) : impl_(std::move(impl)) {}
+
+  bool IsVisible(storage::View view) const { return impl_.IsVisible(view); }
+
+  storage::EdgeTypeId EdgeType() const { return impl_.EdgeType(); }
+
+  auto Properties(storage::View view) const { return impl_.Properties(view); }
+
+  storage::Result<storage::PropertyValue> GetProperty(storage::View view, storage::PropertyId key) const {
+    return impl_.GetProperty(key, view);
+  }
+
+  storage::Result<storage::PropertyValue> SetProperty(storage::PropertyId key, const storage::PropertyValue &value) {
+    return impl_.SetProperty(key, value);
+  }
+
+  storage::Result<storage::PropertyValue> RemoveProperty(storage::PropertyId key) {
+    return SetProperty(key, storage::PropertyValue());
+  }
+
+  storage::Result<std::map<storage::PropertyId, storage::PropertyValue>> ClearProperties() {
+    return impl_.ClearProperties();
+  }
+
+  VertexAccessor To() const;
+
+  VertexAccessor From() const;
+
+  bool IsCycle() const;
+
+  int64_t CypherId() const { return impl_.Gid().AsInt(); }
+
+  storage::Gid Gid() const noexcept { return impl_.Gid(); }
+  
+  //hjm begin
+  storage::Gid fromGid()const noexcept { return impl_.fromGid(); }
+  storage::Gid toGid()const noexcept { return impl_.toGid(); }
+  uint64_t transaction_st(){return impl_.transaction_st();}
+  uint64_t tt_te(){return impl_.tt_te();}
+
+  storage::Delta *getDeltas(){
+    return impl_.getDeltas();
+  }
+  //hjm end
+
+  bool operator==(const EdgeAccessor &e) const noexcept { return impl_ == e.impl_; }
+
+  bool operator!=(const EdgeAccessor &e) const noexcept { return !(*this == e); }
+};
+
+class VertexAccessor final {
+ public:
+  storage::VertexAccessor impl_;
+
+  static EdgeAccessor MakeEdgeAccessor(const storage::EdgeAccessor impl) { return EdgeAccessor(impl); }
+
+ public:
+  explicit VertexAccessor(storage::VertexAccessor impl) : impl_(impl) {}
+
+
+  // explicit VertexAccessor(storage::VertexAccessor impl) : impl_(impl) {}
+
+  bool IsVisible(storage::View view) const { return impl_.IsVisible(view); }
+
+  auto Labels(storage::View view) const { return impl_.Labels(view); }
+
+  storage::Result<bool> AddLabel(storage::LabelId label) { return impl_.AddLabel(label); }
+
+  storage::Result<bool> RemoveLabel(storage::LabelId label) { return impl_.RemoveLabel(label); }
+
+  storage::Result<bool> HasLabel(storage::View view, storage::LabelId label) const {
+    return impl_.HasLabel(label, view);
+  }
+
+  auto Properties(storage::View view) const { return impl_.Properties(view); }
+
+  storage::Result<storage::PropertyValue> GetProperty(storage::View view, storage::PropertyId key) const {
+    return impl_.GetProperty(key, view);
+  }
+
+  storage::Result<storage::PropertyValue> SetProperty(storage::PropertyId key, const storage::PropertyValue &value) {
+    return impl_.SetProperty(key, value);
+  }
+
+  storage::Result<storage::PropertyValue> RemoveProperty(storage::PropertyId key) {
+    return SetProperty(key, storage::PropertyValue());
+  }
+
+  storage::Result<std::map<storage::PropertyId, storage::PropertyValue>> ClearProperties() {
+    return impl_.ClearProperties();
+  }
+
+ //hjm begin
+  storage::Result<std::map<storage::PropertyId, storage::PropertyValue>> ClearProperties2() {
+    return impl_.ClearProperties2();
+  }
+
+  bool haslabels(){
+    return impl_.haslabels();
+  }
+
+  void propsizes(){
+    return impl_.propsizes();
+  }
+
+  storage::Delta *getDeltas(){
+    return impl_.getDeltas();
+  }
+  
+  uint64_t getTTts(){
+    return impl_.getTTts();
+  }
+
+  std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> getInEdges(){
+    return impl_.getInEdges();
+  }
+
+  std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> getOutEdges(){
+    return impl_.getOutEdges();
+  }
+
+  //hjm end
+
+  auto InEdges(storage::View view, const std::vector<storage::EdgeTypeId> &edge_types) const
+      -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *impl_.InEdges(view)))> {
+    auto maybe_edges = impl_.InEdges(view, edge_types);
+    if (maybe_edges.HasError()) return maybe_edges.GetError();
+    return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
+  }
+
+  auto InEdges(storage::View view) const { return InEdges(view, {}); }
+
+  auto InEdges(storage::View view, const std::vector<storage::EdgeTypeId> &edge_types, const VertexAccessor &dest) const
+      -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *impl_.InEdges(view)))> {
+    auto maybe_edges = impl_.InEdges(view, edge_types, &dest.impl_);
+    if (maybe_edges.HasError()) return maybe_edges.GetError();
+    return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
+  }
+
+  auto OutEdges(storage::View view, const std::vector<storage::EdgeTypeId> &edge_types) const
+      -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *impl_.OutEdges(view)))> {
+    auto maybe_edges = impl_.OutEdges(view, edge_types);
+    if (maybe_edges.HasError()) return maybe_edges.GetError();
+    return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
+  }
+
+  auto OutEdges(storage::View view) const { return OutEdges(view, {}); }
+
+  auto OutEdges(storage::View view, const std::vector<storage::EdgeTypeId> &edge_types,
+                const VertexAccessor &dest) const
+      -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *impl_.OutEdges(view)))> {
+    auto maybe_edges = impl_.OutEdges(view, edge_types, &dest.impl_);
+    if (maybe_edges.HasError()) return maybe_edges.GetError();
+    return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
+  }
+
+  storage::Result<size_t> InDegree(storage::View view) const { return impl_.InDegree(view); }
+
+  storage::Result<size_t> OutDegree(storage::View view) const { return impl_.OutDegree(view); }
+
+  int64_t CypherId() const { return impl_.Gid().AsInt(); }
+
+  storage::Gid Gid() const noexcept { return impl_.Gid(); }
+  
+  //hjm begin
+  uint64_t transaction_st(){return impl_.transaction_st();};
+  uint64_t tt_te(){return impl_.tt_te();}
+  //hjm end
+  bool operator==(const VertexAccessor &v) const noexcept {
+    static_assert(noexcept(impl_ == v.impl_));
+    return impl_ == v.impl_;
+  }
+
+  bool operator!=(const VertexAccessor &v) const noexcept { return !(*this == v); }
+};
+
+inline VertexAccessor EdgeAccessor::To() const { return VertexAccessor(impl_.ToVertex()); }
+
+inline VertexAccessor EdgeAccessor::From() const { return VertexAccessor(impl_.FromVertex()); }
+
+inline bool EdgeAccessor::IsCycle() const { return To() == From(); }
+
+
+class DbAccessor final {
+  storage::Storage::Accessor *accessor_;
+
+  class VerticesIterable final {
+    storage::VerticesIterable iterable_;
+
+   public:
+    class Iterator final {
+      storage::VerticesIterable::Iterator it_;
+
+     public:
+      explicit Iterator(storage::VerticesIterable::Iterator it) : it_(it) {}
+
+      VertexAccessor operator*() const { return VertexAccessor(*it_); }
+
+      Iterator &operator++() {
+        ++it_;
+        return *this;
+      }
+
+      bool operator==(const Iterator &other) const { return it_ == other.it_; }
+
+      bool operator!=(const Iterator &other) const { return !(other == *this); }
+    };
+
+    explicit VerticesIterable(storage::VerticesIterable iterable) : iterable_(std::move(iterable)) {}
+
+    Iterator begin() { return Iterator(iterable_.begin()); }
+
+    Iterator end() { return Iterator(iterable_.end()); }
+  };
+
+ public:
+  explicit DbAccessor(storage::Storage::Accessor *accessor) : accessor_(accessor) {}
+  
+  std::optional<VertexAccessor> FindVertex(storage::Gid gid, storage::View view) {
+    auto maybe_vertex = accessor_->FindVertex(gid, view);
+    if (maybe_vertex) return VertexAccessor(*maybe_vertex);
+    return std::nullopt;
+  }
+
+  
+  //hjm begin
+  void ClearHistory(){
+    return accessor_->ClearHistory();
+  }
+  
+  std::optional<std::list<storage::HistoryVertex*>> FindHistoryVertex(uint64_t gid,uint64_t c_ts,uint64_t c_te){
+    return accessor_->FindHistoryVertex(gid,c_ts,c_te);
+  }
+
+  void saveHistoryVertex(uint64_t gid,uint64_t c_ts,uint64_t c_te,storage::HistoryVertex* vertex,uint64_t tt_ts,uint64_t tt_te){
+    return accessor_->saveHistoryVertex(gid,c_ts,c_te,vertex,tt_ts,tt_te);
+  }
+  bool FindHistoryEdgeFlag(uint64_t gid,uint64_t c_ts,uint64_t c_te){
+    return accessor_->FindHistoryEdgeFlag(gid, c_ts,c_te);
+  }
+  void saveHistoryEdgeFlag(uint64_t gid,uint64_t c_ts,uint64_t c_te){
+    return accessor_->saveHistoryEdgeFlag(gid, c_ts,c_te);
+  }
+
+  std::optional<std::vector<std::tuple<storage::HistoryEdge*,uint64_t,uint64_t>>> FindHistoryEdge(uint64_t gid,uint64_t c_ts,uint64_t c_te){
+    return accessor_->FindHistoryEdge(gid,c_ts,c_te);
+  }
+
+  void saveHistoryEdge(uint64_t gid,uint64_t c_ts,uint64_t c_te,storage::HistoryEdge* edge,uint64_t tt_ts,uint64_t tt_te){
+    return accessor_->saveHistoryEdge(gid,c_ts,c_te,edge,tt_ts,tt_te);
+  }
+
+  bool FindHistoryVertexFlag(uint64_t gid,uint64_t c_ts,uint64_t c_te){
+    return accessor_->FindHistoryVertexFlag(gid, c_ts,c_te);
+  }
+  void saveHistoryVertexFlag(uint64_t gid,uint64_t c_ts,uint64_t c_te){
+    return accessor_->saveHistoryVertexFlag(gid, c_ts,c_te);
+  }
+
+  /**
+   * 由现有节点复制成新的节点
+   * 
+   * */
+  //用来创建数据库中的节点+deleted history
+  // std::tuple<storage::Vertex*,uint64_t,uint64_t> GetHistoryVertexFromDelta(const storage::VertexAccessor &another,int index){
+  //   return accessor_->GetHistoryVertexFromDelta(another,index);
+  // }
+  static EdgeAccessor MakeEdgeAccessor(const storage::EdgeAccessor impl) { return EdgeAccessor(impl); }
+  
+
+  auto Edges(std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> &edges_,const std::vector<storage::EdgeTypeId> &edge_types,storage::Gid gid,bool from,std::optional<storage::Gid> existing_gid) const
+      -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *accessor_->Edges(edges_,edge_types, gid,from,existing_gid)))> {
+    auto maybe_edges = accessor_->Edges(edges_,edge_types,gid,from,existing_gid);
+    if (maybe_edges.HasError()) return maybe_edges.GetError();
+    return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
+  }
+
+  // storage::Result<std::vector<EdgeAccessor>> Edges(std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> &edges_,const std::vector<storage::EdgeTypeId> &edge_types){
+  //   return accessor_->Edges(edges_,edge_types);
+  // }
+  storage::HistoryVertex CreateHistoryVertexFromKV(const storage::HistoryVertex another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
+    return accessor_->CreateHistoryVertexFromKV(another,gid_delta_,historyContext_);
+  }
+
+  storage::HistoryVertex CreateHistoryVertexFromKV(const storage::VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
+    return accessor_->CreateHistoryVertexFromKV(another,gid_delta_,historyContext_);
+  }
+
+  storage::HistoryVertex CreateHistoryVertexFromDelta(const storage::VertexAccessor &another,int index,history_delta::historyContext& historyContext_){
+    return accessor_->CreateHistoryVertexFromDelta(another,index,historyContext_);
+  }
+
+  storage::HistoryVertex CreateHistoryVertexFromDelta2(const storage::VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & may_props,history_delta::historyContext& historyContext_){
+    return accessor_->CreateHistoryVertexFromDelta(another,may_props,historyContext_);
+  }
+
+
+  storage::HistoryVertex CreateAnchorVertex(uint64_t gid,nlohmann::json gid_delta_,std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> in_edges,std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> out_edges){
+    return accessor_->CreateAnchorVertex(gid,gid_delta_,in_edges,out_edges);
+  }
+  // storage::HistoryEdge* CreateHistoryEdgeFromKV(storage::HistoryEdge* another,nlohmann::json gid_delta_){
+  //   return accessor_->CreateHistoryEdgeFromKV(another,gid_delta_);
+  // }
+  // storage::HistoryEdge* CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another){
+  //   return accessor_->CreateHistoryEdgeFromDelta(another);
+  // }
+  // storage::HistoryEdge* CreateHistoryEdgeFromDelta(storage::HistoryEdge* &another,int index){
+  //   return accessor_->CreateHistoryEdgeFromDelta(another,index);
+  // }
+
+ 
+  // storage::HistoryEdge CreateHistoryEdgeFromKV(storage::HistoryEdge another,nlohmann::json gid_delta_){
+  //   return accessor_->CreateHistoryEdgeFromKV(another,gid_delta_);
+  // }
+  storage::HistoryEdge CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another){
+    return accessor_->CreateHistoryEdgeFromDelta(another);
+  }
+  storage::HistoryEdge CreateHistoryEdgeFromDelta(storage::HistoryEdge &another,int index){
+    return accessor_->CreateHistoryEdgeFromDelta(another,index);
+  }
+  
+  //v3.0
+  storage::HistoryEdge CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another,int index){
+    return accessor_->CreateHistoryEdgeFromDelta(another,index);
+  }
+  storage::HistoryEdge CreateHistoryEdgeFromKV(const storage::EdgeAccessor &another,nlohmann::json gid_delta_){
+    return accessor_->CreateHistoryEdgeFromKV(another,gid_delta_);
+  }
+  storage::HistoryEdge CreateHistoryEdgeFromKV(storage::HistoryEdge edge_,nlohmann::json gid_delta_){
+    return accessor_->CreateHistoryEdgeFromKV(edge_,gid_delta_);
+  }
+  storage::HistoryEdge CreateAnchorEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_){
+    return accessor_->CreateAnchorEdge(another,gid_delta_);
+  }
+    
+
+  // std::vector<storage::HistoryEdge*> CreateHistoryDeleteEdgeFromVertex(const storage::HistoryVertex* vertex){
+  //   return accessor_->CreateHistoryDeleteEdgeFromVertex(vertex);
+  // }
+  std::optional<VertexAccessor> FindDeleteVertex(storage::Gid gid, storage::View view){
+    auto maybe_vertex = accessor_->FindDeleteVertex(gid, view);
+    if (maybe_vertex) return VertexAccessor(*maybe_vertex);
+    return std::nullopt;
+  }
+
+  std::list<storage::Gid> getdeletedvertex(){
+    return accessor_->getdeletedvertex();
+  }
+
+  // std::list<storage::Gid> getDeletedEdges(){
+  //   return accessor_->getDeletedEdges();
+  // }
+
+  std::list<storage::Vertex*> getdeletedvertex2(){
+    return accessor_->getdeletedvertex2();
+  }
+  //根据kv数据创建边
+  EdgeAccessor CreateHistoryEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
+    auto maybe_edge=accessor_->CreateHistoryEdge(another,gid_delta_,historyContext_);
+    return EdgeAccessor(maybe_edge);
+  }
+  //根据delta数据创建边
+  
+   EdgeAccessor CreateHistoryEdge2(const storage::EdgeAccessor &another,int index,history_delta::historyContext &historyContext_){
+    auto maybe_edge=accessor_->CreateHistoryEdge2(another,index,historyContext_);
+    return EdgeAccessor(maybe_edge);
+  }
+
+  // auto CreateHistoryEdge2(const EdgeAccessor &another,int index,history_delta::historyContext& historyContext_,std::map<uint64_t,std::vector<TypedValue> all_vertex_) const
+  //     -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *accessor_.CreateHistoryEdge2(const EdgeAccessor &another,int index,history_delta::historyContext& historyContext_,std::map<uint64_t,std::vector<TypedValue> all_vertex_)))> {
+  //   auto maybe_edges = accessor_.CreateHistoryEdge2(const EdgeAccessor &another,int index,history_delta::historyContext& historyContext_,std::map<uint64_t,std::vector<TypedValue> all_vertex_);
+  //   return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
+  // }
+
+  VertexAccessor getHistoryVertexOnce(const storage::VertexAccessor &another,std::vector<int> dead_deltas,std::vector<nlohmann::json> deleted_kv,history_delta::historyContextOnce& historyContext,bool delete_flag){
+    auto maybe_vertex=accessor_->getHistoryVertexOnce(another,dead_deltas,deleted_kv,historyContext,delete_flag);
+    return VertexAccessor(maybe_vertex);
+  }
+
+  VertexAccessor CreateHistoryVertex(const storage::VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
+    auto maybe_vertex=accessor_->CreateHistoryVertex(another,gid_delta_,historyContext_);
+    return VertexAccessor(maybe_vertex);
+  }
+  
+  //数据中的节点+delta数据
+  VertexAccessor CreateHistoryVertex2(const storage::VertexAccessor &another,int index,history_delta::historyContext &historyContext_){
+    auto maybe_vertex=accessor_->CreateHistoryVertex2(another,index,historyContext_);
+    return VertexAccessor(maybe_vertex);
+  }
+  
+  //自行创建节点
+  VertexAccessor CreateHistoryVertex3(uint64_t gid,nlohmann::json delete_info,history_delta::historyContext &historyContext_){
+    auto maybe_vertex=accessor_->CreateHistoryVertex3(gid,delete_info,historyContext_);
+    return VertexAccessor(maybe_vertex);
+  }
+
+  std::optional<history_delta::History_delta>& GetHistoryDelta(){
+    return accessor_->GetHistoryDelta();
+  }
+
+  storage::HistoryVertex CreateHistoryDelteVertex(uint64_t gid,nlohmann::json gid_delta_){
+    return accessor_->CreateHistoryDelteVertex(gid,gid_delta_);
+  }
+
+  storage::Gid IdToGid(const uint64_t key) { return accessor_->IdToGid(key); }
+  //hjm end;
+
+  void FinalizeTransaction() { accessor_->FinalizeTransaction(); }
+
+  VerticesIterable Vertices(storage::View view) { return VerticesIterable(accessor_->Vertices(view)); }
+
+  VerticesIterable Vertices(storage::View view, storage::LabelId label) {
+    return VerticesIterable(accessor_->Vertices(label, view));
+  }
+
+  VerticesIterable Vertices(storage::View view, storage::LabelId label, storage::PropertyId property) {
+    return VerticesIterable(accessor_->Vertices(label, property, view));
+  }
+
+  VerticesIterable Vertices(storage::View view, storage::LabelId label, storage::PropertyId property,
+                            const storage::PropertyValue &value) {
+    return VerticesIterable(accessor_->Vertices(label, property, value, view));
+  }
+
+  VerticesIterable Vertices(storage::View view, storage::LabelId label, storage::PropertyId property,
+                            const std::optional<utils::Bound<storage::PropertyValue>> &lower,
+                            const std::optional<utils::Bound<storage::PropertyValue>> &upper) {
+    return VerticesIterable(accessor_->Vertices(label, property, lower, upper, view));
+  }
+
+  VertexAccessor InsertVertex() { return VertexAccessor(accessor_->CreateVertex()); }
+
+  storage::Result<EdgeAccessor> InsertEdge(VertexAccessor *from, VertexAccessor *to,
+                                           const storage::EdgeTypeId &edge_type) {
+    auto maybe_edge = accessor_->CreateEdge(&from->impl_, &to->impl_, edge_type);
+    if (maybe_edge.HasError()) return storage::Result<EdgeAccessor>(maybe_edge.GetError());
+    return EdgeAccessor(*maybe_edge);
+  }
+
+  storage::Result<std::optional<EdgeAccessor>> RemoveEdge(EdgeAccessor *edge) {
+    auto res = accessor_->DeleteEdge(&edge->impl_);
+    if (res.HasError()) {
+      return res.GetError();
+    }
+
+    const auto &value = res.GetValue();
+    if (!value) {
+      return std::optional<EdgeAccessor>{};
+    }
+
+    return std::make_optional<EdgeAccessor>(*value);
+  }
+
+  storage::Result<std::optional<std::pair<VertexAccessor, std::vector<EdgeAccessor>>>> DetachRemoveVertex(
+      VertexAccessor *vertex_accessor) {
+    using ReturnType = std::pair<VertexAccessor, std::vector<EdgeAccessor>>;
+
+    auto res = accessor_->DetachDeleteVertex(&vertex_accessor->impl_);
+    if (res.HasError()) {
+      return res.GetError();
+    }
+
+    const auto &value = res.GetValue();
+    if (!value) {
+      return std::optional<ReturnType>{};
+    }
+
+    const auto &[vertex, edges] = *value;
+
+    std::vector<EdgeAccessor> deleted_edges;
+    deleted_edges.reserve(edges.size());
+    std::transform(edges.begin(), edges.end(), std::back_inserter(deleted_edges),
+                   [](const auto &deleted_edge) { return EdgeAccessor{deleted_edge}; });
+
+    return std::make_optional<ReturnType>(vertex, std::move(deleted_edges));
+  }
+
+  storage::Result<std::optional<VertexAccessor>> RemoveVertex(VertexAccessor *vertex_accessor) {
+    auto res = accessor_->DeleteVertex(&vertex_accessor->impl_);
+    if (res.HasError()) {
+      return res.GetError();
+    }
+
+    const auto &value = res.GetValue();
+    if (!value) {
+      return std::optional<VertexAccessor>{};
+    }
+
+    return std::make_optional<VertexAccessor>(*value);
+  }
+
+  storage::PropertyId NameToProperty(const std::string_view &name) { return accessor_->NameToProperty(name); }
+
+  storage::LabelId NameToLabel(const std::string_view &name) { return accessor_->NameToLabel(name); }
+
+  storage::EdgeTypeId NameToEdgeType(const std::string_view &name) { return accessor_->NameToEdgeType(name); }
+
+  const std::string &PropertyToName(storage::PropertyId prop) const { return accessor_->PropertyToName(prop); }
+
+  const std::string &LabelToName(storage::LabelId label) const { return accessor_->LabelToName(label); }
+
+  const std::string &EdgeTypeToName(storage::EdgeTypeId type) const { return accessor_->EdgeTypeToName(type); }
+
+  void AdvanceCommand() { accessor_->AdvanceCommand(); }
+
+  utils::BasicResult<storage::ConstraintViolation, void> Commit() { return accessor_->Commit(); }
+
+  void Abort() { accessor_->Abort(); }
+
+  bool LabelIndexExists(storage::LabelId label) const { return accessor_->LabelIndexExists(label); }
+
+  bool LabelPropertyIndexExists(storage::LabelId label, storage::PropertyId prop) const {
+    return accessor_->LabelPropertyIndexExists(label, prop);
+  }
+
+  int64_t VerticesCount() const { return accessor_->ApproximateVertexCount(); }
+
+  int64_t VerticesCount(storage::LabelId label) const { return accessor_->ApproximateVertexCount(label); }
+
+  int64_t VerticesCount(storage::LabelId label, storage::PropertyId property) const {
+    return accessor_->ApproximateVertexCount(label, property);
+  }
+
+  int64_t VerticesCount(storage::LabelId label, storage::PropertyId property,
+                        const storage::PropertyValue &value) const {
+    return accessor_->ApproximateVertexCount(label, property, value);
+  }
+
+  int64_t VerticesCount(storage::LabelId label, storage::PropertyId property,
+                        const std::optional<utils::Bound<storage::PropertyValue>> &lower,
+                        const std::optional<utils::Bound<storage::PropertyValue>> &upper) const {
+    return accessor_->ApproximateVertexCount(label, property, lower, upper);
+  }
+
+  storage::IndicesInfo ListAllIndices() const { return accessor_->ListAllIndices(); }
+
+  storage::ConstraintsInfo ListAllConstraints() const { return accessor_->ListAllConstraints(); }
+};
+
+}  // namespace query
+
+namespace std {
+
+template <>
+struct hash<query::VertexAccessor> {
+  size_t operator()(const query::VertexAccessor &v) const { return std::hash<decltype(v.impl_)>{}(v.impl_); }
+};
+
+template <>
+struct hash<query::EdgeAccessor> {
+  size_t operator()(const query::EdgeAccessor &e) const { return std::hash<decltype(e.impl_)>{}(e.impl_); }
+};
+
+}  // namespace std
