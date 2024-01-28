@@ -40,7 +40,7 @@ Each temporal workload includes various temporal query types. We extend non-temp
 * T-mgBench includes four temporal queries.
 
   | Query | Statements | 
-      |----------|----------|
+  |----------|----------|
   |Q1| Match (n: User {id: $id}) TT AS OF $t$ RETURN n|
   |Q2|Match (n: User {id: $id}) TT From $t_1$ to $t_2$ RETURN n |
   |Q3|Match (n: User {id: $id})-[e]->(m)  TT AS OF $t$ RETURN n,e,m|
