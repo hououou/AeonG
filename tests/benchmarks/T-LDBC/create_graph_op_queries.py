@@ -1,4 +1,5 @@
 import random
+import datetime
 import csv
 import os
 import string
@@ -32,6 +33,10 @@ class LDBC():
         self._update_person_lists = []
         self._update_comment_lists = []
         self._update_post_lists = []
+        # 每一个类别节点create个数的上限
+        self._create_person_num = int(self._max_create_op * 0.5 * 0.5)
+        self._create_comment_num = int(self._max_create_op * 0.5 * 0.25)
+        self._create_post_num = (self._max_create_op) / 2 - self._create_person_num - self._create_comment_num
 
         ###########help function###########
 
@@ -118,10 +123,35 @@ class LDBC():
         else:
             return self.read_from_file(update_path)
 
+    ###########generator###########
+    def generate_random_timestamp(start_year, end_year):
+        start_date = datetime.datetime(start_year, 1, 1)
+        end_date = datetime.datetime(end_year, 12, 31)
+        time_between_dates = end_date - start_date
+        days_between_dates = time_between_dates.days
+        random_number_of_days = random.randrange(days_between_dates)
+        random_date = start_date + datetime.timedelta(days=random_number_of_days)
+        random_timestamp = random_date.timestamp()   
+        # 生成随机的毫秒数
+        random_ms = random.randint(0, 999)
+        # 将毫秒数添加到时间戳中
+        random_timestamp_with_ms = int(random_timestamp*1000 + random_ms)
+        return random_timestamp_with_ms
+
+    def generate_random_string(min_length, max_length):
+        length = random.randint(min_length, max_length)
+        letters = string.ascii_letters
+        random_string = ''.join(random.choices(letters, k=length))
+        return random_string
+
+    def generate_random_ip():
+        ip = ".".join(str(random.randint(0, 255)) for _ in range(4))
+        return ip
+
     ###########update query###########
     # update person
     def query_person_set_ip(self, v_id, gen_type):
-        location_ip = self.ip_generator()
+        location_ip = self.generate_random_ip()
         query = ""
         if (gen_type == "Cypher"):
             query = f"MATCH (p:Person {{id: '{v_id}'}}) SET p.locationIP ='{location_ip}';"
@@ -182,20 +212,6 @@ class LDBC():
             query = query_state
         return query
 
-    # TODO(Zhouyu): create query
-    ###########create query###########
-    def create_vertx(self):
-        cypher_lists = []
-        tgql_cypher_lists = []
-        return cypher_lists, tgql_cypher_lists
-
-    # TODO(Zhouyu): delete query
-    ###########delete query###########
-    def delete_edges(self):
-        cypher_lists = []
-        tgql_cypher_lists = []
-        return cypher_lists, tgql_cypher_lists
-
     ###########update vertex property##############
     def _update_person(self):
         cypher_lists = []
@@ -231,6 +247,210 @@ class LDBC():
             tgql_cypher_lists.append(tgql_post)
         return cypher_lists, tgql_cypher_lists
 
+    # TODO(Zhouyu): create query
+    ###########create query###########
+    def query_add_person():
+        self._id_to_be = self._id_to_be + 1
+        tgql_query=""
+        query=""
+        head=["id","firstName","lastName","gender","birthday","creationDate","locationIP","browserUsed"]
+        browser = self.browserUsed[random.randint(0, 3)]
+        props=[]
+        pid=self._id_to_be
+        props.append(str(pid))
+        pFirst=generate_random_string(4,8)
+        props.append(pFirst)
+        pLast=generate_random_string(4,10)
+        props.append(pLast)
+        pGender="male"
+        if pid % 2 == 1:
+            pGender = "female"
+        props.append(pGender)
+        pBirth=str(generate_random_timestamp(1970,2000))
+        props.append(pBirth)
+        pCreate=str(generate_random_timestamp(2015,2020))
+        props.append(pCreate)
+        pIP=generate_random_ip()
+        props.append(pIP)
+        props.append(browser)
+        # tgdb
+        query=f"CREATE (p:Person {{id: {pid},firstName:'{pFirst}',lastName:'{pLast}',gender:'{pGender}',birthday:{pBirth},creationDate:{pCreate},locationIP:'{pIP}',browserUsed:'{browser}'}});"
+        # tgql
+        node_id=f"Person{pid}"
+        node_info=f"Create (n:Object {{ title:'Person',id:'{node_id}',validTimeStart:timestamp(),validTimeEnd:9223372036854775000 }})"
+        #create id
+        query_state=f" Create (n)-[:OBJECT_ATTRIBUTE]->(a:Attribute {{title:'id',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "+\
+                    f" Create (a)-[:ATTRIBUTE_VALUE]->(v:Value {{title:{pid},validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})"
+        att_infos=" "
+        for j in range(0,len(head)):
+            attribute_name=head[j]
+            attribute_value=props[j]
+            if(attribute_name=="id"):
+                continue
+            if(attribute_value==""):
+                continue
+            attribute_index="a"+str(j)
+            attribute_info=f" Create (n)-[:OBJECT_ATTRIBUTE]->({attribute_index}:Attribute {{title:\"{attribute_name}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+            value_info=f" Create ({attribute_index})-[:ATTRIBUTE_VALUE]->(:Value {{title:\"{attribute_value}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+            att_infos=att_infos+attribute_info+value_info           
+        tgql_query=node_info+query_state+att_infos
+        return query,tgql_query
+
+    def query_add_comment():
+        self._id_to_be = self._id_to_be + 1
+        tgql_query=""
+        query=""
+        head=["id","creationDate","locationIP","browserUsed","content","length"]
+        props=[]
+        pid=self._id_to_be
+        props.append(str(pid))
+        pCreate=str(generate_random_timestamp(2015,2020))
+        props.append(pCreate)
+        pIP=generate_random_ip()
+        props.append(pIP)
+        browser = self.browserUsed[random.randint(0, 3)]
+        props.append(browser)
+        pContent=generate_random_string(1,random.randint(1,300))
+        props.append(pContent)
+        pLength=len(pContent)
+        props.append(str(pLength))
+        # tgdb
+        query=f"CREATE (p:Comment {{id: {pid},creationDate:{pCreate},locationIP:'{pIP}',browserUsed:'{browser}',content:'{pContent}',length:'{pLength}'}});"
+        # tgql
+        node_id=f"Comment{pid}"
+        node_info=f"Create (n:Object {{ title:'Comment',id:'{node_id}',validTimeStart:timestamp(),validTimeEnd:9223372036854775000 }})"
+        #create id
+        query_state=f" Create (n)-[:OBJECT_ATTRIBUTE]->(a:Attribute {{title:'id',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "+\
+                    f" Create (a)-[:ATTRIBUTE_VALUE]->(v:Value {{title:{pid},validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})"
+        att_infos=" "
+        for j in range(0,len(props)):
+            attribute_name=head[j]
+            attribute_value=props[j]
+            if(attribute_name=="id"):
+                continue
+            if(attribute_value==""):
+                continue
+            attribute_index="a"+str(j)
+            attribute_info=f" Create (n)-[:OBJECT_ATTRIBUTE]->({attribute_index}:Attribute {{title:\"{attribute_name}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+            value_info=f" Create ({attribute_index})-[:ATTRIBUTE_VALUE]->(:Value {{title:\"{attribute_value}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+            att_infos=att_infos+attribute_info+value_info           
+        tgql_query=node_info+query_state+att_infos
+        return query,tgql_query
+
+    def query_add_post():
+        self._id_to_be = self._id_to_be + 1
+        tgql_query=""
+        query=""
+        head=["id","creationDate","locationIP","browserUsed","language","content","length"]
+        props=[]
+        pid=self._id_to_be
+        props.append(str(pid))
+        pCreate=str(generate_random_timestamp(2015,2020))
+        props.append(pCreate)
+        pIP=generate_random_ip()
+        props.append(pIP)
+        browser = self.browserUsed[random.randint(0, 3)]
+        props.append(browser)
+        pLanguage=generate_random_string(1,4)
+        props.append(pLanguage)
+        pContent=generate_random_string(1,random.randint(1,300))
+        props.append(pContent)
+        pLength=len(pContent)
+        props.append(str(pLength))
+        
+        # tgdb
+        query=f"CREATE (p:Post {{id: {pid},creationDate:{pCreate},locationIP:'{pIP}',browserUsed:'{browser}',language:'{pLanguage}',content:'{pContent}',length:'{pLength}'}});"
+        # tgql
+        node_id=f"Post{pid}"
+        node_info=f"Create (n:Object {{ title:'Post',id:'{node_id}',validTimeStart:timestamp(),validTimeEnd:9223372036854775000 }})"
+        #create id
+        query_state=f" Create (n)-[:OBJECT_ATTRIBUTE]->(a:Attribute {{title:'id',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "+\
+                    f" Create (a)-[:ATTRIBUTE_VALUE]->(v:Value {{title:{pid},validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})"
+        att_infos=" "
+        for j in range(0,len(head)):
+            attribute_name=head[j]
+            attribute_value=props[j]
+            if(attribute_name=="id"):
+                continue
+            if(attribute_value==""):
+                continue
+            attribute_index="a"+str(j)
+            attribute_info=f" Create (n)-[:OBJECT_ATTRIBUTE]->({attribute_index}:Attribute {{title:\"{attribute_name}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+            value_info=f" Create ({attribute_index})-[:ATTRIBUTE_VALUE]->(:Value {{title:\"{attribute_value}\",validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
+            att_infos=att_infos+attribute_info+value_info           
+        tgql_query=node_info+query_state+att_infos
+        return query,tgql_query
+
+    def add_edge(from_node, edge_type, to_node):
+        query=f"MATCH (n1 {{id:{from_node}}}),(n2 {{id:{to_node}}}) with n1, n2 Create (n1)-[:{edge_type}]-(n2);"
+        tgql_query=f"MATCH (o1:Object)-[o:OBJECT_ATTRIBUTE]-(att {{title:'id'}})-[a:ATTRIBUTE_VALUE]-(v {{title:{from_node}}}),(o2:Object)-[:OBJECT_ATTRIBUTE]-(att2 {{title:'id'}})-[a2:ATTRIBUTE_VALUE]-(v2 {{title:{to_node}}}) with o1, o2 Create (o1)-[:{edge_type}]-(o2);"
+        return query,tgql_query
+    
+    def _create(self):
+        person_edge_list=random.sample(self._update_person_lists,self._create_person_num)
+        person_edge_list_2=random.sample(self._update_person_lists,self._create_person_num)
+        person_edge_list_3=random.sample(self._update_person_lists,self._create_comment_num)
+        person_edge_list_4=random.sample(self._update_person_lists,self._create_post_num)
+        comment_edge_list=random.sample(self._update_comment_lists,self._create_comment_num)
+        post_edge_list=random.sample(self._update_post_lists,self._create_post_num)
+        cypher_lists = []
+        tgql_cypher_lists = []
+        for i in range(self._create_person_num):
+            create_query,tgql_create_query=self.query_add_person()
+            cypher_lists.append(create_query)
+            tgql_cypher_lists.append(tgql_create_query)
+            create_query,tgql_create_query=self.add_edge(person_edge_list[i],"KNOWS",person_edge_list_2[i])
+            cypher_lists.append(create_query)
+            tgql_cypher_lists.append(tgql_create_query)
+        for i in range(self._create_comment_num):
+            create_query,tgql_create_query=self.query_add_comment()
+            cypher_lists.append(create_query)
+            tgql_cypher_lists.append(tgql_create_query)
+            create_query,tgql_create_query=self.add_edge(person_edge_list_3[i],"LIKES",comment_edge_list[i])
+            cypher_lists.append(create_query)
+            tgql_cypher_lists.append(tgql_create_query)
+        for i in range(self._create_post_num):
+            create_query,tgql_create_query=self.query_add_post()
+            cypher_lists.append(create_query)
+            tgql_cypher_lists.append(tgql_create_query)
+            create_query,tgql_create_query=self.add_edge(person_edge_list_4[i],"LIKES",post_edge_list[i])
+            cypher_lists.append(create_query)
+            tgql_cypher_lists.append(tgql_create_query)
+        return cypher_lists, tgql_cypher_lists
+
+    # TODO(Zhouyu): delete query
+    ######### delete query ############
+    def delete_node(node_label,person_id):
+        query=f"MATCH (p:Person {{id:{person_id}}})-[e]-() delete e, p;"
+        tgql_query1=f"MATCH (p:Object {{id:{node_label}{person_id}}})-[o:OBJECT_ATTRIBUTE]-(att)-[a:ATTRIBUTE_VALUE]-(v) delete o,a,att,v;"
+        tgql_query2=f"MATCH (p:Object {{id:{node_label}{person_id}}})-[e]-() delete e;"
+        return query, tgql_query1,tgql_query2
+
+    def delete_edge(from_node, edge_type, to_node):
+        query=f"MATCH (n1 {{id:{from_node}}})-[e:{edge_type}]-(n2 {{id:{to_node}}}) delete e;"
+        tgql_query=f"MATCH (o1:Object)-[o:OBJECT_ATTRIBUTE]-(att {{title:'id'}})-[a:ATTRIBUTE_VALUE]-(v {{title:{from_node}}}),(o2:Object)-[:OBJECT_ATTRIBUTE]-(att2 {{title:'id'}})-[a2:ATTRIBUTE_VALUE]-(v2 {{title:{to_node}}}) with o1, o2 MATCH (o1)-[e:edge_type]-(o2) delete e;"
+        return query,tgql_query
+
+    def _delete(self):
+        person_edge_list=random.sample(self._update_person_lists,self._create_person_num)
+        comment_edge_list=random.sample(self._update_comment_lists,self._create_comment_num)
+        post_edge_list=random.sample(self._update_post_lists,self._create_post_num)
+        cypher_lists = []
+        tgql_cypher_lists = []
+        for i in range(self._create_person_num):
+            delete_query,tgql_delete_query=self.delete_node("Person",person_edge_list[i])
+            cypher_lists.append(delete_query)
+            tgql_cypher_lists.append(tgql_delete_query)
+        for i in range(self._create_comment_num):
+            delete_query,tgql_delete_query=self.delete_node("Comment",comment_edge_list[i])
+            cypher_lists.append(delete_query)
+            tgql_cypher_lists.append(tgql_delete_query)
+        for i in range(self._create_post_num):
+            delete_query,tgql_delete_query=self.delete_node("Post",post_edge_list[i])
+            cypher_lists.append(delete_query)
+            tgql_cypher_lists.append(tgql_delete_query)
+        return cypher_lists, tgql_cypher_lists
+
     def get_all_queries(self, ldbc_csv_path, write_path):
         peak_vertex_path = f"{write_path}peak_vertices"
         write_lists = []
@@ -253,9 +473,16 @@ class LDBC():
         cypher_lists, tgql_cypher_lists = self._update_post()
         write_lists += cypher_lists
         TGQL_write_lists += tgql_cypher_lists
-
+        # 2. prepare for create query
+        cypher_lists, tgql_cypher_lists = self._create()
+        write_lists += cypher_lists
+        TGQL_write_lists += tgql_cypher_lists
         random.shuffle(write_lists)
         random.shuffle(TGQL_write_lists)
+        # 3. prepare for delete query
+        cypher_lists, tgql_cypher_lists = self._delete()
+        write_lists += cypher_lists
+        TGQL_write_lists += tgql_cypher_lists
         return write_lists,TGQL_write_lists
 
 
