@@ -106,6 +106,12 @@ class LDBC():
                 person_id = (lines[i].split("|"))[0]
                 update_type_lists.append(person_id)
             self.write_to_file(file_path=update_path, write_lists=update_type_lists)
+            if "person" in file_path:
+                self._update_person_lists=update_type_lists
+            elif "comment" in file_path:
+                self._update_comment_lists=update_type_lists
+            elif "post" in file_path:
+                self._update_post_lists=update_type_lists
             # write vertex count
             data = pd.value_counts(update_type_lists)
             data.to_csv(update_count_path, header=False)
@@ -423,7 +429,7 @@ class LDBC():
     def delete_node(node_label,person_id):
         query=f"MATCH (p:Person {{id:{person_id}}})-[e]-() delete e, p;"
         tgql_query1=f"MATCH (p:Object {{id:{node_label}{person_id}}})-[o:OBJECT_ATTRIBUTE]-(att)-[a:ATTRIBUTE_VALUE]-(v) delete o,a,att,v;"
-        tgql_query2=f"MATCH (p:Object {{id:{node_label}{person_id}}})-[e]-() delete e;"
+        tgql_query2=f"MATCH (p:Object {{id:{node_label}{person_id}}})-[e]-() delete e ,p;"
         return query, tgql_query1,tgql_query2
 
     def delete_edge(from_node, edge_type, to_node):
@@ -438,17 +444,20 @@ class LDBC():
         cypher_lists = []
         tgql_cypher_lists = []
         for i in range(self._create_person_num):
-            delete_query,tgql_delete_query=self.delete_node("Person",person_edge_list[i])
+            delete_query,tgql_delete_query_1,tgql_delete_query_2=self.delete_node("Person",person_edge_list[i])
             cypher_lists.append(delete_query)
-            tgql_cypher_lists.append(tgql_delete_query)
+            tgql_cypher_lists.append(tgql_delete_query_1)
+            tgql_cypher_lists.append(tgql_delete_query_2)
         for i in range(self._create_comment_num):
-            delete_query,tgql_delete_query=self.delete_node("Comment",comment_edge_list[i])
+            delete_query,tgql_delete_query_1,tgql_delete_query_2=self.delete_node("Comment",comment_edge_list[i])
             cypher_lists.append(delete_query)
-            tgql_cypher_lists.append(tgql_delete_query)
+            tgql_cypher_lists.append(tgql_delete_query_1)
+            tgql_cypher_lists.append(tgql_delete_query_2)
         for i in range(self._create_post_num):
-            delete_query,tgql_delete_query=self.delete_node("Post",post_edge_list[i])
+            delete_query,tgql_delete_query_1,tgql_delete_query_2=self.delete_node("Post",post_edge_list[i])
             cypher_lists.append(delete_query)
-            tgql_cypher_lists.append(tgql_delete_query)
+            tgql_cypher_lists.append(tgql_delete_query_1)
+            tgql_cypher_lists.append(tgql_delete_query_2)
         return cypher_lists, tgql_cypher_lists
 
     def get_all_queries(self, ldbc_csv_path, write_path):
@@ -458,6 +467,7 @@ class LDBC():
         # 1. get update vertex id lists 2.get queries
         self._get_type_lists(f"{peak_vertex_path}/update_person_Num{self._max_graph_op}",
                              f"{ldbc_csv_path}/person_0_0.csv", self._update_person_num)
+        # 2.1 prepare for update query
         cypher_lists, tgql_cypher_lists = self._update_person()
         write_lists += cypher_lists
         TGQL_write_lists += tgql_cypher_lists
@@ -473,13 +483,13 @@ class LDBC():
         cypher_lists, tgql_cypher_lists = self._update_post()
         write_lists += cypher_lists
         TGQL_write_lists += tgql_cypher_lists
-        # 2. prepare for create query
+        # 2.2. prepare for create query
         cypher_lists, tgql_cypher_lists = self._create()
         write_lists += cypher_lists
         TGQL_write_lists += tgql_cypher_lists
         random.shuffle(write_lists)
         random.shuffle(TGQL_write_lists)
-        # 3. prepare for delete query
+        # 2.3. prepare for delete query
         cypher_lists, tgql_cypher_lists = self._delete()
         write_lists += cypher_lists
         TGQL_write_lists += tgql_cypher_lists
