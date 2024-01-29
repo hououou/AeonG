@@ -103,14 +103,14 @@ The arguments are almost same to the above create_temporal_database.p, except "-
     python evaluate_temporal_q.py --help
 
 ## Experiments
-We also provide scripts to evaluate the performance of AeonG on T-mgBench benchmark. You can also edit following scripts to test other benchmarks.
-### Performance comparison
-Our system and baseline systems can be found in the following docker images.
+
+### Run experiments
+We provide scrips to compare our system with baseline systems, Clock-G and T-GQL. Our system and baseline systems can be pulled in the following docker image.
       
       docker pull hououou/aeong:v2
 
-You can use following scripts to reproduce our paper. For each workload, we compare it with Clock-G and T-GQL among three aspects, including storage consumption, graph operation latency, and temporal query latency. The results will be printed by the shell. 
-You need to specify the number of generated graph operation ($num_op), the binary path of Clock-G, and the binary path of T-GQL. You can find those in our ducker images (/home/clockg[memgraph-master]/build/memgraph). 
+You can use following scripts to reproduce our paper. For each workload, we compare among three aspects, including storage consumption, graph operation latency, and temporal query latency. The results will be printed by the shell. 
+You need to specify the number of generated graph operation ($num_op), the binary path of Clock-G ($clockg_binary), and the binary path of T-GQL ($memgraph_binary). You can find binary of baseline systems in our ducker image (/home/clockg[memgraph-master]/build/memgraph). 
      
        cd tests/experiments
       ./t_mgBench_test.sh $num_op $clockg_binary $memgraph_binary
@@ -118,37 +118,14 @@ You need to specify the number of generated graph operation ($num_op), the binar
       ./t_gMark_test.sh $num_op $clockg_binary $memgraph_binary
       
 ### Run AeonG manually
-#### 1. Storage consumption & graph operation performance
-* Download datasets of temporal workloads. Downloaded datasets will be shown in the [dataset directory](/tests/datasets/). The datasets will be downloaded in the /tests/datasets/T-mgBench directory.
+You can also test AeonG performance according to your needs. We guide you with following steps:
 
-        cd tests/scripts
-        ./download_datasets.sh
-* Generate graph operation query statements. The generated results will be stored in /tests/results/graph_op directory.
+* Download dataset
+* Generate graph operation query statements. You can use generation tools in our benchmarks directory (/benchmarks/$workload_name/create_graph_op_queries.py).
+* Create temporal database. You can use the tool in our script directory (/tests/scripts/create_temporal_database.py). It will report the graph operation query latency and storage consumption.
+* Generate temporal query statements.  You can use generation tools in our benchmarks directory (/benchmarks/$workload_name/create_temporal_query.py).
+* Evaluate temporal performance. You can use the tool in our script directory (/tests/scripts/evaluate_temporal_q.py). It will report the temporal query latency.
 
-        cd tests/scripts
-        ./generate_graph_op.sh 
-
-* Create temporal graph database. The temporal databse will be generated in /tests/results/database directory. Additionally, it will report the average graph operation query latency and the storage consumptions of generated temproal database.
-
-        cd tests/scripts
-        python3 create_temporal_database.py
-
-
-#### 2. Temporal query performance
-* Generate temporal graph database as above steps.
-
-        cd tests/scripts
-        ./download_datasets.sh
-        ./generate_graph_op.sh 
-        python3 create_temporal_database.py
-
-* Generate temporal query statements. The generated results will be stored in /tests/results/temporal_query directory.
-
-        ./generate_temporal_q.sh 
-
-* Evaluate temproal query performance using the follwing command. It will report the average temproal query latency.
-
-        python3 evaluate_temporal_q.py
 
 ## AeonG Implementation
 AeonG is extended based on Memgraph. The details of our idea can be found in our [paper](https://hououou.github.io/AeonG/docs/aeong-extended-version-vldb24.pdf). We also refer Memgraph [internal docs](https://memgraph.notion.site/Memgraph-Internals-12b69132d67a417898972927d6870bd2) to better understand our codes. We made following major changes to support temporal features.
