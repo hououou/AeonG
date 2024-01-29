@@ -8,7 +8,7 @@ import pandas as pd
 import argparse
 
 class mgbench():
-    def __init__(self, size="small", max_ops=80000, update_ratio=0.8, delete_ratio=0.1):
+    def __init__(self, size="small", dataset_path="../../datasets/T-mgBench/", max_ops=80000, update_ratio=0.8, delete_ratio=0.1):
         SIZES = {
             "small": {"vertices": 10000, "edges": 121716},
             "medium": {"vertices": 100000, "edges": 1768515},
@@ -16,9 +16,9 @@ class mgbench():
         }
 
         Dataset = {
-            "small": "../../datasets/T-mgBench/small.cypher",
-            "medium": "../../datasets/T-mgBench/medium.cypher",
-            "large": "../../datasets/T-mgBench/large.cypher",
+            "small": dataset_path+"small.cypher",
+            "medium": dataset_path+"medium.cypher",
+            "large": dataset_path+"large.cypher",
         }
 
         self._size = size
@@ -263,7 +263,7 @@ if __name__ == "__main__":
     parser.add_argument("--size",
                         default="small",
                         help="Dataset size")
-    parser.add_argument("--num-op",
+    parser.add_argument("--num-op", type=int,
                         default=80000,
                         help="The number of graph operation queries")
     parser.add_argument("--update-ratio",
@@ -272,6 +272,9 @@ if __name__ == "__main__":
     parser.add_argument("--delete-ratio",
                         default=0.1,
                         help="The delete ratio of graph operation queries")
+    parser.add_argument("--dataset-path",
+                        default="../../datasets/T-mgBench/",
+                        help="The original dataset path")
     parser.add_argument("--write-path",
                         default="../../results/",
                         help="The write path of results")
@@ -280,8 +283,8 @@ if __name__ == "__main__":
     print("=========check your configuration========")
     for key, value in parsed_args.items():
         print(f"  {key}: {value}")
-    mgbench = mgbench(args.size, args.num_op, args.update_ratio, args.delete_ratio)
-    file_name = mgbench._size + "_Num" + str(mgbench._max_graph_op)
+    mgbench = mgbench(args.size, args.dataset_path, args.num_op, args.update_ratio, args.delete_ratio)
+    file_name = "num" + str(mgbench._max_graph_op)
     # get update node ids and cache in the file
     mgbench.get_various_id_lists(args.write_path + "peak_vertices/" + file_name)
     # get all queries

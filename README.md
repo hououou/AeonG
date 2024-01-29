@@ -102,10 +102,23 @@ The arguments are almost same to the above create_temporal_database.p, except "-
 
     python evaluate_temporal_q.py --help
 
-## Run experiments
+## Experiments
 We also provide scripts to evaluate the performance of AeonG on T-mgBench benchmark. You can also edit following scripts to test other benchmarks.
+### Performance comparison
+Our system and baseline systems can be found in the following docker images.
+      
+      docker pull hououou/aeong:v2
 
-### 1. Storage consumption & graph operation performance
+You can use following scripts to reproduce our paper. For each workload, we compare it with Clock-G and T-GQL among three aspects, including storage consumption, graph operation latency, and temporal query latency. The results will be printed by the shell. 
+You need to specify the number of generated graph operation ($num_op), the binary path of Clock-G, and the binary path of T-GQL. You can find those in our ducker images (/home/clockg[memgraph-master]/build/memgraph). 
+     
+       cd tests/experiments
+      ./t_mgBench_test.sh $num_op $clockg_binary $memgraph_binary
+      ./t_LDBC_test.sh $num_op $clockg_binary $memgraph_binary
+      ./t_gMark_test.sh $num_op $clockg_binary $memgraph_binary
+      
+### Run AeonG manually
+#### 1. Storage consumption & graph operation performance
 * Download datasets of temporal workloads. Downloaded datasets will be shown in the [dataset directory](/tests/datasets/). The datasets will be downloaded in the /tests/datasets/T-mgBench directory.
 
         cd tests/scripts
@@ -121,7 +134,7 @@ We also provide scripts to evaluate the performance of AeonG on T-mgBench benchm
         python3 create_temporal_database.py
 
 
-### 2. Temporal query performance
+#### 2. Temporal query performance
 * Generate temporal graph database as above steps.
 
         cd tests/scripts

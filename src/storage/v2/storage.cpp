@@ -1428,7 +1428,7 @@ storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromKV(const EdgeAccess
     // Move to the next delta.
     deltas = deltas->next.load(std::memory_order_acquire);    
   }
-  
+
 
   //TT_TS TT_TE
   auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));

@@ -1,9 +1,13 @@
 import argparse
 import sys
 import os
+import time
+from datetime import datetime
+
 sys.path.append('../mgbench')
 import helpers
 import runners
+
 
 def extract_timestamp(filename):
     parts = filename.split('_')
@@ -13,6 +17,7 @@ def extract_timestamp(filename):
     except ValueError:
         timestamp = 0
     return timestamp
+
 
 def find_file_with_max_timestamp(directory):
     max_timestamp = float('-inf')  # Initialize with negative infinity
@@ -30,25 +35,64 @@ def find_file_with_max_timestamp(directory):
                 max_timestamp_filename = filename
     return max_timestamp_filename
 
-def get_space(folder_path):
-    total_size = 0
-    snapshot_directory=folder_path+"/memgraph/snapshots"
-    max_timestamp_filename = find_file_with_max_timestamp(snapshot_directory)
-    snapshot_file_name=os.path.join(snapshot_directory, max_timestamp_filename)
-    total_size += os.path.getsize(snapshot_file_name)
 
-    #get historical data
-    folder_path=folder_path+"/memgraph/historical_deltes"
+def get_historical_space(folder_path):
     file_extension = '.log'
-    file_extension2='.sst'
+    file_extension2 = '.sst'
+    get_size = 0
     for root, dirs, files in os.walk(folder_path):
         for file in files:
             if file.endswith(file_extension) or file.endswith(file_extension2):
                 file_path = os.path.join(root, file)
                 # 获取文件大小
                 file_size = os.path.getsize(file_path)
-                total_size += file_size
-    return total_size
+                get_size += file_size
+    return get_size
+
+
+def get_space(folder_path, binary_type):
+    total_size = 0
+    snapshot_directory = folder_path + "/memgraph/snapshots"
+    max_timestamp_filename = find_file_with_max_timestamp(snapshot_directory)
+    snapshot_file_name = os.path.join(snapshot_directory, max_timestamp_filename)
+    total_size += os.path.getsize(snapshot_file_name)
+
+    # get historical data
+    if binary_type != "clockg":
+        folder_path = folder_path + "/memgraph/history_deltas"
+        total_size += get_historical_space(folder_path)
+        return total_size
+    else:
+        total_size += get_historical_space(folder_path + "/memgraph/history_deltas1")
+        total_size += get_historical_space(folder_path + "/memgraph/history_deltas2")
+        total_size += get_historical_space(folder_path + "/memgraph/history_deltas3")
+        total_size += get_historical_space(folder_path + "/memgraph/history_deltas4")
+        total_size += get_historical_space(folder_path + "/memgraph/history_copy1")
+        total_size += get_historical_space(folder_path + "/memgraph/history_copy2")
+        total_size += get_historical_space(folder_path + "/memgraph/history_copy3")
+        total_size += get_historical_space(folder_path + "/memgraph/history_copy4")
+        return total_size
+
+
+def get_binary(args):
+    if args.binary_type == "aeong":
+        aeong = runners.Memgraph(args.aeong_binary, args.data_directory, not args.no_properties_on_edges,
+                                 memgraph_port=7687,
+                                 snapshot_interval_sec=30, memory_limit=0, anchor_num=10, real_time_flag=False)
+        aeong.start_dataset()
+        return aeong
+    if args.binary_type == "tgql":
+        tgql = runners.Memgraph(args.aeong_binary, args.data_directory, not args.no_properties_on_edges,
+                                memgraph_port=7687,
+                                snapshot_interval_sec=30, memory_limit=0, anchor_num=10, real_time_flag=False)
+        tgql.start_tgql_dataset()
+        return tgql
+    if args.binary_type == "clockg":
+        clockg = runners.Memgraph(args.aeong_binary, args.data_directory, not args.no_properties_on_edges,
+                                  memgraph_port=7687, memory_limit=0, snapshot_interval_sec=0, anchor_num=10,
+                                  graph_operations=args.clockg_snapshot)
+        clockg.start_clockg_dataset()
+        return clockg
 
 
 if __name__ == "__main__":
@@ -83,24 +127,34 @@ if __name__ == "__main__":
     parser.add_argument("--no-properties-on-edges",
                         action="store_true",
                         help="disable properties on edges")
+    parser.add_argument("--clockg-snapshot", type=int,
+                        default=80000,
+                        help="every x graph operations create a snapshot")
+    parser.add_argument("--binary-type",
+                        default="aeong",
+                        help="aeong, tgql, clockg")
 
     args = parser.parse_args()
     parsed_args = vars(args)
-    print("=========check your configuration========")
-    for key, value in parsed_args.items():
-        print(f"  {key}: {value}")
-    #
-    aeong = runners.Memgraph(args.aeong_binary, args.data_directory, not args.no_properties_on_edges, memgraph_port=7687,
-                             snapshot_interval_sec=30, memory_limit=0, anchor_num=10, real_time_flag=False)
+    # print("=========check your configuration========")
+    # for key, value in parsed_args.items():
+    #     print(f"  {key}: {value}")
+
+    # print("=========create temporal database now, it will spend some time========")
+    aeong = get_binary(args)
     client = runners.Client(args.client_binary, args.data_directory, memgraph_port=7687)
-    aeong.start_dataset()
-    print("=========create index========")
+    # create index
     client.execute(file_path=args.index_cypher_path, num_workers=args.num_workers)
-    print("=========create original database========")
-    ret = client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
-    print("=========process graph operations to generate historical data========")
+    # create original database
+    client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
+    # process graph operations to generate historical data
+    start_time = int(time.time() * 1000000)
     graph_op_ret = client.execute(file_path=args.graph_operation_cypher_path, num_workers=args.num_workers)
-    print("graph operation latency(s):", graph_op_ret[0]['duration']/graph_op_ret[0]['count'])
-    print("=========close databases and get space consumptions========")
+    end_time = int(time.time() * 1000000)
+    if args.binary_type == "clockg":
+        #need time to store historical data
+        time.sleep(5 * 60)
+    if args.binary_type == "aeong":
+        time.sleep(60)
     aeong.stop()
-    print("storage consumption(kb):",get_space(args.data_directory))
+    print(graph_op_ret[0]['duration'] / graph_op_ret[0]['count'],get_space(args.data_directory,args.binary_type)/1024/1024,start_time,end_time)

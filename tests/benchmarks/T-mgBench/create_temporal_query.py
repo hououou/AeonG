@@ -188,20 +188,20 @@ if __name__ == "__main__":
     parser.add_argument("--size",
                         default="small",
                         help="Dataset size")
-    parser.add_argument("--num-op",
+    parser.add_argument("--num-op",type=int,
                         default=80000,
                         help="The number of graph operation queries")
-    parser.add_argument("--max-time",
+    parser.add_argument("--max-time",type=int,
                         default=100,
                         help="Max time of the datasets life")
-    parser.add_argument("--min-time",
+    parser.add_argument("--min-time", type=int,
                         default=0,
                         help="Min time of the datasets life")
     parser.add_argument("--write-path",
                         default="../../results/",
                         help="The write path of reults")
     parser.add_argument("--interval",
-                        default=10,
+                        default=100,
                         help="Interval of time-slice queries")
     parser.add_argument("--frequency-type",
                         default="mix",
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     for key, value in parsed_args.items():
         print(f"  {key}: {value}")
     mgbench = mgbench(args.size, args.num_op)
-    prefix = mgbench._size + "_Num" + str(mgbench._max_graph_op)
+    prefix = "num" + str(mgbench._max_graph_op)
     peak_vertices_path = args.write_path + "peak_vertices/" + prefix + "_update_count.csv"
     print("=========writing temporal queries========")
     q1_lists, q2_lists, q3_lists, q4_lists = mgbench.Q(peak_vertices_path, "Cypher", args.min_time, args.max_time, args.interval, args.frequency_type)
