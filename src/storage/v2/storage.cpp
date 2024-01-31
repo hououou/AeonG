@@ -586,319 +586,11 @@ Storage::Accessor::~Accessor() {
 
   FinalizeTransaction();
 }
-// hjm begin
-//rocksdb 回收old history
+
 bool Storage::ReclaimHistoryRentention(const std::chrono::milliseconds &retention_period){
   return saved_history_deltas_->RemoveOldHistory(retention_period);
 }
 
-//根据kv文件创建历史边
-EdgeAccessor Storage::Accessor::CreateHistoryEdge(const EdgeAccessor&another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
-  Delta *delta = nullptr;
-  auto edge_it = new Edge(another.edge_.ptr->gid,delta,another.edge_.ptr->transaction_st,another.edge_.ptr->from_gid,another.edge_.ptr->to_gid);
-  // auto edge= EdgeRef(&*edge_it);
-  
-  //current information
-  //properties 
-  auto maybe_properties=another.edge_.ptr->properties.Properties();
-  for (const auto &prop : maybe_properties ){
-    edge_it->properties.SetProperty(prop.first,prop.second);
-  }
-
-  //deleted info
-  //properties 
-  if(gid_delta_.find("SP")!=gid_delta_.end()){
-    auto history_props_=gid_delta_["SP"];
-    for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-      auto key = it_iter.key();
-      auto value=it_iter.value();
-      auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-      auto property_value = DeserializePropertyValue(value);//query::serialization::
-      edge_it->properties.SetProperty(property_id,property_value);
-    }
-  }
-  
-  //TT_TS TT_TE
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  edge_it->properties.SetProperty(property_id,property_value);
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  edge_it->properties.SetProperty(property_id2,property_value2);
-
-  edge_it->transaction_st=gid_delta_["TT_TS"].get<uint64_t>();
-  // edge_it->tt_te=gid_delta_["TT_TE"].get<uint64_t>();
-
-  auto edge= EdgeRef(&*edge_it);
-
- return EdgeAccessor(edge, another.edge_type_, another.from_vertex_, another.to_vertex_, another.transaction_, &storage_->indices_,&storage_->constraints_, another.config_);
-  // return EdgeAccessor{edge, another.edge_type_, another.from_vertex_, another.to_vertex_, another.transaction_,another.indices_,another.constraints_,another.config_};
-}
-
-//根据delta创建历史边
-EdgeAccessor Storage::Accessor::CreateHistoryEdge2(const EdgeAccessor &another,int index,history_delta::historyContext& historyContext_){
-  Delta *delta = nullptr;
-  auto edge_it = new Edge(another.edge_.ptr->gid,delta,another.edge_.ptr->transaction_st,another.edge_.ptr->from_gid,another.edge_.ptr->to_gid);
-  auto maybe_properties=another.edge_.ptr->properties.Properties();
-  for (const auto &prop : maybe_properties ){
-    edge_it->properties.SetProperty(prop.first,prop.second);
-  }
-
-  //dead info
-  auto deltas=another.edge_.ptr->delta;
-  int index_=0;
-  while (deltas != nullptr) {
-    if(deltas->action==storage::Delta::Action::SET_PROPERTY){
-      edge_it->properties.SetProperty(deltas->property.key,deltas->property.value);
-    }
-    //reconstruct end
-    if(index_+1==index) break;
-    // Move to the next delta.
-    deltas = deltas->next.load(std::memory_order_acquire);    
-    index_++;
-  }
-  
-  //TT_TS TT_TE
-  //Gid::FromUint
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue((int64_t)deltas->transaction_st);
-  edge_it->properties.SetProperty(property_id,property_value);
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue((int64_t)deltas->commit_timestamp);
-  edge_it->properties.SetProperty(property_id2,property_value2);
-
-  edge_it->transaction_st=deltas->transaction_st;
-  // edge_it->tt_te=deltas->commit_timestamp;
-
-  auto edge= EdgeRef(&*edge_it);
-
-  // std::vector<EdgeAccessor> ret;
-  // auto vertex_gid=another.from_vertex_->gid.AsUint();
-  // if(all_vertex_.find(vertex_gid)!=all_vertex_.end()){
-  //   for(auto vertex:all_vertex_[vertex_gid]){
-  //     if(vertex.transaction_st>=deltas->transaction_st & vertex.tt_te<=deltas->commit_timestamp){
-  //       ret.emplace_back(edge, another.edge_type_, vertex, another.to_vertex_, another.transaction_, &storage_->indices_,&storage_->constraints_, another.config_);
-  //     }
-  //   }
-  // }else{
-  //   ret.emplace_back(edge, another.edge_type_, another.from_vertex_, another.to_vertex_, another.transaction_, &storage_->indices_,&storage_->constraints_, another.config_);
-  // }
-  // return std::move(ret);
-  return EdgeAccessor(edge, another.edge_type_, another.from_vertex_, another.to_vertex_, another.transaction_, &storage_->indices_,&storage_->constraints_, another.config_);
-}
-
-//根据kv文件创建历史节点
-VertexAccessor Storage::Accessor::CreateHistoryVertex(const VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
-
-  auto vertex = new Vertex(another.vertex_->gid,another.vertex_->delta,another.vertex_->transaction_st);
-  //current information
-  //properties 
-  auto maybe_properties=another.vertex_->properties.Properties();
-  for (const auto &prop : maybe_properties ){
-    vertex->properties.SetProperty(prop.first,prop.second);
-  }
-  //labels 
-  vertex->labels=another.vertex_->labels;
-   //edges
-  vertex->in_edges=another.vertex_->in_edges;
-  vertex->out_edges=another.vertex_->out_edges;
-
-
-  //deleted info
-  //properties 
-  if(gid_delta_.find("SP")!=gid_delta_.end()){
-    auto history_props_=gid_delta_["SP"];
-    for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-      auto key = it_iter.key();
-      auto value=it_iter.value();
-      auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-      auto property_value = DeserializePropertyValue(value);//query::serialization::
-      vertex->properties.SetProperty(property_id,property_value);
-    }
-  }
-  
-  //labels 
-  if(gid_delta_.find("L")!=gid_delta_.end()){
-    auto history_labels_=gid_delta_["L"].get<std::vector<std::pair<std::string,std::string>>>();;
-    for (auto [key,value]:history_labels_){
-       auto label_id = LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-       auto it = std::find(vertex->labels.begin(), vertex->labels.end(), label_id);
-      if (key=="AL") {
-        if (it != vertex->labels.end()) continue;
-        vertex->labels.push_back(label_id);
-      } else {
-        if (it == vertex->labels.end()) continue;
-        std::swap(*it, vertex->labels.back());
-        vertex->labels.pop_back();
-      }
-    }
-  }
-
-  //TT_TS TT_TE
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  vertex->properties.SetProperty(property_id,property_value);
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  vertex->properties.SetProperty(property_id2,property_value2);
-  
-  vertex->transaction_st=gid_delta_["TT_TS"].get<uint64_t>();
-  // vertex->tt_te=gid_delta_["TT_TE"].get<uint64_t>();
-  //TODO edges
-  
-  return VertexAccessor{vertex, another.transaction_, another.indices_, another.constraints_, another.config_};
-}
-
-//根据delta创建历史节点
-VertexAccessor Storage::Accessor::CreateHistoryVertex2(const VertexAccessor &another,int index,history_delta::historyContext& historyContext_){
-  auto deltas=another.vertex_->delta;
-  auto vertex = new Vertex(another.vertex_->gid,deltas,another.vertex_->transaction_st);
-  //Current info
-  auto maybe_properties=another.vertex_->properties.Properties();
-  for (const auto &prop : maybe_properties ){
-    vertex->properties.SetProperty(prop.first,prop.second);
-  }
-  vertex->labels=another.vertex_->labels;
-  vertex->in_edges=another.vertex_->in_edges;
-  vertex->out_edges=another.vertex_->out_edges;
-  
-  //dead info
-  int index_=0;
-  while (deltas != nullptr) {
-    switch (deltas->action) {
-      case storage::Delta::Action::DELETE_OBJECT:{
-        //  std::cout<<index_<<" DELETE_OBJECT\n";
-        //do nothing
-        break;
-      }
-      case storage::Delta::Action::RECREATE_OBJECT: {
-        // std::cout<<index_<<" RECREATE_OBJECT\n";
-        break;
-      }
-      case storage::Delta::Action::SET_PROPERTY: {
-        // std::cout<<index_<<" SET_PROPERTY\n";
-        vertex->properties.SetProperty(deltas->property.key,deltas->property.value);
-        break;
-      }
-      case storage::Delta::Action::ADD_LABEL:
-      case storage::Delta::Action::REMOVE_LABEL: {
-        // std::cout<<index_<<" labels\n";
-        auto label_id =deltas->label;
-        auto it = std::find(vertex->labels.begin(), vertex->labels.end(), label_id);
-        if (deltas->action==storage::Delta::Action::ADD_LABEL) {
-          if (it != vertex->labels.end()) continue;
-          vertex->labels.push_back(label_id);
-        } else {
-          if (it == vertex->labels.end()) continue;
-          std::swap(*it, vertex->labels.back());
-          vertex->labels.pop_back();
-        }
-        break;
-      }
-      case storage::Delta::Action::ADD_OUT_EDGE:{
-        // std::cout<<index_<<" edges\n";
-        break;
-      }
-      case storage::Delta::Action::REMOVE_OUT_EDGE: {
-        // std::cout<<index_<<" edges\n";
-        break;
-      }
-      case storage::Delta::Action::ADD_IN_EDGE:
-      case storage::Delta::Action::REMOVE_IN_EDGE:
-        // std::cout<<index_<<" edges\n";
-        break;
-    }
-    //reconstruct end
-    if(index_+1==index) break;
-
-    // Move to the next delta.
-    deltas = deltas->next.load(std::memory_order_acquire);    
-    index_++;
-  }
-  //TT_TS TT_TE
-  //Gid::FromUint
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue((int64_t)deltas->transaction_st);
-  vertex->properties.SetProperty(property_id,property_value);
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue((int64_t)deltas->commit_timestamp);
-  vertex->properties.SetProperty(property_id2,property_value2);
-  
-  vertex->transaction_st=deltas->transaction_st;
-  // vertex->tt_te=deltas->commit_timestamp;
-  return VertexAccessor{vertex, another.transaction_, another.indices_, another.constraints_, another.config_};
-}
-
-//还原kv中的删除节点
-storage::HistoryVertex Storage::Accessor::CreateHistoryDelteVertex(uint64_t gid,nlohmann::json gid_delta_){
-  //properties
-  std::vector<LabelId> maybe_labels;
-  std::map<PropertyId, PropertyValue> maybe_properties;
-
-  //properties 
-  if(gid_delta_.find("SP")!=gid_delta_.end()){
-    auto history_props_=gid_delta_["SP"];
-    for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-      auto key = it_iter.key();
-      auto value=it_iter.value();
-      auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-      auto property_value = DeserializePropertyValue(value);//query::serialization::
-      if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[property_id]=property_value;
-      else maybe_properties[property_id]=storage::PropertyValue("NULL");
-    }
-  }
-  
-  //labels 
-  if(gid_delta_.find("L")!=gid_delta_.end()){
-    auto history_labels_=gid_delta_["L"].get<std::vector<std::pair<std::string,std::string>>>();
-    for (auto [key,value]:history_labels_){
-       auto label_id = LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-       auto it = std::find(maybe_labels.begin(), maybe_labels.end(), label_id);
-      if (key=="AL") {
-        if (it != maybe_labels.end()) continue;
-        maybe_labels.push_back(label_id);
-      } else {
-        if (it == maybe_labels.end()) continue;
-        std::swap(*it, maybe_labels.back());
-        maybe_labels.pop_back();
-      }
-    }
-  }
-
-  //TT_TS TT_TE
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  maybe_properties[property_id]=property_value;
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  maybe_properties[property_id2]=property_value2;
-
-
-  auto tt_ts=gid_delta_["TT_TS"].get<uint64_t>();
-  auto tt_te=gid_delta_["TT_TE"].get<uint64_t>();
-  //TODO edges
-
-  auto new_vertex=HistoryVertex(Gid::FromUint(gid),tt_ts,tt_te);
-  new_vertex.labels=maybe_labels;
-  new_vertex.properties=maybe_properties;
-  
-  return new_vertex;
-}
-
-
-/**
- * @brief 根据kv文件创建历史节点
- * 
- * @param vertex_ history_vertex
- * @param gid_delta_ 
- * @param historyContext_ 
- * @return storage::HistoryVertex* 
- */
 storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromKV(const storage::HistoryVertex vertex_,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
   //properties
   auto maybe_labels= vertex_.labels;
@@ -908,45 +600,6 @@ storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromKV(const storag
   auto property_ids = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("delete_info"));
   auto property_values = storage::PropertyValue(gid_delta_.dump());
   maybe_properties[property_ids]=property_values;
-  
-  //properties 
-  // if(gid_delta_.find("SP")!=gid_delta_.end()){
-  //   auto history_props_=gid_delta_["SP"];
-  //   for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-  //     auto key = it_iter.key();
-  //     auto value=it_iter.value();
-  //     auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-  //     auto property_value = DeserializePropertyValue(value);//query::serialization::
-  //     if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[property_id]=property_value;
-  //     else maybe_properties[property_id]=storage::PropertyValue("NULL");
-  //   }
-  // }
-  
-  // //labels 
-  // if(gid_delta_.find("L")!=gid_delta_.end()){
-  //   auto history_labels_=gid_delta_["L"].get<std::vector<std::pair<std::string,std::string>>>();;
-  //   for (auto [key,value]:history_labels_){
-  //      auto label_id = LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-  //      auto it = std::find(maybe_labels.begin(), maybe_labels.end(), label_id);
-  //     if (key=="AL") {
-  //       if (it != maybe_labels.end()) continue;
-  //       maybe_labels.push_back(label_id);
-  //     } else {
-  //       if (it == maybe_labels.end()) continue;
-  //       std::swap(*it, maybe_labels.back());
-  //       maybe_labels.pop_back();
-  //     }
-  //   }
-  // }
- 
-  // //TT_TS TT_TE
-  // auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  // auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  // maybe_properties[property_id]=property_value;
-
-  // auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  // auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  // maybe_properties[property_id2]=property_value2;
 
 
   auto tt_ts=gid_delta_["TT_TS"].get<uint64_t>();
@@ -957,24 +610,13 @@ storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromKV(const storag
   new_vertex.labels=maybe_labels;
   new_vertex.properties=maybe_properties;
 
-  //edges
-  // std::cout<<"CreateHistoryVertexFromKV::943\n";
-  // new_vertex.in_history_edges=vertex_.in_history_edges;
-  // new_vertex.out_history_edges=vertex_.out_history_edges;
   new_vertex.in_edges=vertex_.in_edges;
   new_vertex.out_edges=vertex_.out_edges;
   
   return new_vertex;
 }
 
-/**
- * @brief v2.0 根据kv文件创建历史节点
- * 
- * @param vertex_ VertexAccessor
- * @param gid_delta_ 
- * @param historyContext_ 
- * @return storage::HistoryVertex* 
- */
+
 storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromKV(const VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
   //properties
   auto deltas=another.vertex_->delta;
@@ -984,76 +626,6 @@ storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromKV(const Vertex
   auto property_ids = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("delete_info"));
   auto property_values = storage::PropertyValue(gid_delta_.dump());
   maybe_properties[property_ids]=property_values;
-  //dead info
-  // while (deltas != nullptr) {
-  //   switch (deltas->action) {
-  //     case storage::Delta::Action::SET_PROPERTY: {
-  //       auto property_value=deltas->property.value;
-  //       if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[deltas->property.key]=property_value;
-  //       else{
-  //         maybe_properties[deltas->property.key]=storage::PropertyValue("NULL");;
-  //       }
-  //       break;
-  //     }
-  //     case storage::Delta::Action::ADD_LABEL:
-  //     case storage::Delta::Action::REMOVE_LABEL: {
-  //       auto label_id =deltas->label;
-  //       auto it = std::find(maybe_labels.begin(), maybe_labels.end(), label_id);
-  //       if (deltas->action==storage::Delta::Action::ADD_LABEL) {
-  //         if (it != maybe_labels.end()) continue;
-  //         maybe_labels.push_back(label_id);
-  //       } else {
-  //         if (it == maybe_labels.end()) continue;
-  //         std::swap(*it, maybe_labels.back());
-  //         maybe_labels.pop_back();
-  //       }
-  //       break;
-  //     }
-  //     default:break;
-  //   }
-  //   // Move to the next delta.
-  //   deltas = deltas->next.load(std::memory_order_acquire);    
-  // }
-  
-  // //deleted info
-  // //properties 
-  // if(gid_delta_.find("SP")!=gid_delta_.end()){
-  //   auto history_props_=gid_delta_["SP"];
-  //   for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-  //     auto key = it_iter.key();
-  //     auto value=it_iter.value();
-  //     auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-  //     auto property_value = DeserializePropertyValue(value);//query::serialization::
-  //     if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[property_id]=property_value;
-  //     else maybe_properties[property_id]=storage::PropertyValue("NULL");
-  //   }
-  // }
-  
-  // //labels 
-  // if(gid_delta_.find("L")!=gid_delta_.end()){
-  //   auto history_labels_=gid_delta_["L"].get<std::vector<std::pair<std::string,std::string>>>();;
-  //   for (auto [key,value]:history_labels_){
-  //      auto label_id = LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-  //      auto it = std::find(maybe_labels.begin(), maybe_labels.end(), label_id);
-  //     if (key=="AL") {
-  //       if (it != maybe_labels.end()) continue;
-  //       maybe_labels.push_back(label_id);
-  //     } else {
-  //       if (it == maybe_labels.end()) continue;
-  //       std::swap(*it, maybe_labels.back());
-  //       maybe_labels.pop_back();
-  //     }
-  //   }
-  // }
-
-  // //TT_TS TT_TE
-  // auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  // auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  // maybe_properties[property_id]=property_value;
-
-  // auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  // auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  // maybe_properties[property_id2]=property_value2;
 
 
   auto tt_ts=gid_delta_["TT_TS"].get<uint64_t>();
@@ -1063,48 +635,12 @@ storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromKV(const Vertex
   new_vertex.labels=maybe_labels;
   new_vertex.properties=maybe_properties;
 
-  //edges
-  //还原尚未被删除的边
-  // new_vertex.in_history_edges=CreateHistoryDeleteEdgeFromVertex(deltas,"AIE");
-  // new_vertex.out_history_edges=CreateHistoryDeleteEdgeFromVertex(deltas,"AOE");
-  //边
+ //边
   new_vertex.in_edges=another.vertex_->in_edges;
   new_vertex.out_edges=another.vertex_->out_edges;
-  // std::cout<<"CreateHistoryVertexFromKV::1021\n";
-  
+
   return new_vertex;
 }
-
-/**
- * @brief v2.0 根据delta创建历史节点
- * 
- * @param another VertexAccessor
- * @param index deltas需要还原的index
- * @param historyContext_ 
- * @return storage::HistoryVertex* 
- */
-// storage::HistoryVertex Storage::Accessor::SetHistoryVertexFromDelta(const VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & maybe_props,history_delta::historyContext& historyContext_){
-//   auto deltas=another.vertex_->delta;
-//   //Current info
-//   auto maybe_labels=another.vertex_->labels;
-//   auto tt_ts=std::get<1>(maybe_props);
-//   auto tt_te=std::get<2>(maybe_props);
-//   auto maybe_properties=std::get<0>(maybe_props);
-//   auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-//   auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-//   auto property_value = storage::PropertyValue((int64_t)tt_ts);
-//   maybe_properties[property_id]=property_value;
-//   auto property_value2 = storage::PropertyValue((int64_t)tt_te);
-//   maybe_properties[property_id2]=property_value2;
-
-//   auto new_vertex=HistoryVertex(another.vertex_->gid,tt_ts,tt_te);
-//   new_vertex.labels=maybe_labels;
-//   new_vertex.properties=maybe_properties;
-//   //edges
-//   new_vertex.in_edges=another.vertex_->in_edges;
-//   new_vertex.out_edges=another.vertex_->out_edges;
-//   return new_vertex;
-// }
 
 
 storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromDelta(const VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & maybe_props,history_delta::historyContext& historyContext_){
@@ -1131,282 +667,7 @@ storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromDelta(const Ver
   return new_vertex;
 }
 
-storage::HistoryVertex Storage::Accessor::CreateHistoryVertexFromDelta(const VertexAccessor &another,int index,history_delta::historyContext& historyContext_){
-  auto deltas=another.vertex_->delta;
-  //Current info
-  auto maybe_properties=another.vertex_->properties.Properties();
-  auto maybe_labels=another.vertex_->labels;
-  
-  //dead info
-  auto tt_ts=another.vertex_->transaction_st;
-  // auto tt_te=another.vertex_->tt_te;//original
-  // auto tt_te=another.tt_te();//wzy 0512
-  auto tt_te=(uint64_t)std::numeric_limits<int64_t>::max();//wzy 0512
-  int index_=0;
-  while (deltas != nullptr) {
-    if(index==0) break;
-    switch (deltas->action) {
-      case storage::Delta::Action::DELETE_OBJECT:
-      case storage::Delta::Action::RECREATE_OBJECT:  {
-        tt_ts=deltas->transaction_st;
-        tt_te=deltas->commit_timestamp;
-        break;
-      }
-      case storage::Delta::Action::SET_PROPERTY: {
-        auto property_value=deltas->property.value;
-        if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[deltas->property.key]=property_value;
-        else{
-          maybe_properties[deltas->property.key]=storage::PropertyValue("NULL");;
-        }
-        tt_ts=deltas->transaction_st;
-        tt_te=deltas->commit_timestamp;
-        break;
-      }
-      case storage::Delta::Action::ADD_LABEL:
-      case storage::Delta::Action::REMOVE_LABEL: {
-        auto label_id =deltas->label;
-        auto it = std::find(maybe_labels.begin(), maybe_labels.end(), label_id);
-        if (deltas->action==storage::Delta::Action::ADD_LABEL) {
-          if (it != maybe_labels.end()) continue;
-          maybe_labels.push_back(label_id);
-        } else {
-          if (it == maybe_labels.end()) continue;
-          std::swap(*it, maybe_labels.back());
-          maybe_labels.pop_back();
-        }
-        tt_ts=deltas->transaction_st;
-        tt_te=deltas->commit_timestamp;
-        break;
-      }
-      case storage::Delta::Action::ADD_OUT_EDGE:
-      case storage::Delta::Action::REMOVE_OUT_EDGE:
-      case storage::Delta::Action::ADD_IN_EDGE:
-      case storage::Delta::Action::REMOVE_IN_EDGE:
-        break;
-    }
-    //reconstruct end
-    index_++;
-    if(index_==index) break;
 
-    // Move to the next delta.
-    deltas = deltas->next.load(std::memory_order_acquire);    
-  }
-  
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value = storage::PropertyValue((int64_t)tt_ts);
-  maybe_properties[property_id]=property_value;
-  auto property_value2 = storage::PropertyValue((int64_t)tt_te);
-  maybe_properties[property_id2]=property_value2;
-
-  auto new_vertex=HistoryVertex(another.vertex_->gid,tt_ts,tt_te);
-  new_vertex.labels=maybe_labels;
-  new_vertex.properties=maybe_properties;
-
-  //edges
-  //还原尚未被删除的边
-  // new_vertex.in_history_edges=CreateHistoryDeleteEdgeFromVertex(deltas,"AIE");
-  // new_vertex.out_history_edges=CreateHistoryDeleteEdgeFromVertex(deltas,"AOE");
-  //边
-  new_vertex.in_edges=another.vertex_->in_edges;
-  new_vertex.out_edges=another.vertex_->out_edges;
-  // for(auto &[edgetype,vertex,edgeref]:another.vertex_->in_edges){
-  //   // std::cout<<"add history in edge:"<<edgeref.ptr->transaction_st<<" "<<edgeref.ptr->tt_te<<"\n";
-  //   auto history_edge=new HistoryEdge(edgeref.ptr->gid,edgeref.ptr->transaction_st,edgeref.ptr->tt_te,edgeref.ptr->from_gid,edgeref.ptr->to_gid,edgetype,edgeref.ptr->delta);
-  //   history_edge->properties=edgeref.ptr->properties.Properties();
-  //   new_vertex->in_history_edges.emplace_back(history_edge);
-  // }
-  // new_vertex->out_history_edges=CreateHistoryDeleteEdgeFromVertex(new_vertex,deltas,"AOE");
-  // for(auto &[edgetype,vertex,edgeref]:another.vertex_->out_edges){
-  //   // std::cout<<"add history out edge:"<<edgeref.ptr->transaction_st<<" "<<edgeref.ptr->tt_te<<"\n";
-  //   auto history_edge=new HistoryEdge(edgeref.ptr->gid,edgeref.ptr->transaction_st,edgeref.ptr->tt_te,edgeref.ptr->from_gid,edgeref.ptr->to_gid,edgetype,edgeref.ptr->delta);
-  //   history_edge->properties=edgeref.ptr->properties.Properties();
-  //   new_vertex->out_history_edges.emplace_back(history_edge);
-  // }
-  return new_vertex;
-}
-
-/**
- * @brief 还原kv中anchor类型的节点
- * 
- * @param gid 
- * @param gid_delta_ 
- * @param in_edges 
- * @param out_edges 
- * @return storage::HistoryVertex 
- */
-storage::HistoryVertex Storage::Accessor::CreateAnchorVertex(uint64_t gid,nlohmann::json gid_delta_,std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> in_edges,std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> out_edges){
-  //properties
-  std::vector<LabelId> maybe_labels;
-  std::map<PropertyId, PropertyValue> maybe_properties;
-
-  //properties 
-  if(gid_delta_.find("SP")!=gid_delta_.end()){
-    auto history_props_=gid_delta_["SP"];
-    for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-      auto key = it_iter.key();
-      auto value=it_iter.value();
-      auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-      auto property_value = DeserializePropertyValue(value);//query::serialization::
-      if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[property_id]=property_value;
-      else maybe_properties[property_id]=storage::PropertyValue("NULL");
-    }
-  }
-  
-  //labels 
-  if(gid_delta_.find("L")!=gid_delta_.end()){
-    auto history_labels_=gid_delta_["L"].get<std::vector<std::pair<std::string,std::string>>>();
-    for (auto [key,value]:history_labels_){
-       auto label_id = LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-       auto it = std::find(maybe_labels.begin(), maybe_labels.end(), label_id);
-      if (key=="AL") {
-        if (it != maybe_labels.end()) continue;
-        maybe_labels.push_back(label_id);
-      } else {
-        if (it == maybe_labels.end()) continue;
-        std::swap(*it, maybe_labels.back());
-        maybe_labels.pop_back();
-      }
-    }
-  }
-
-  //TT_TS TT_TE
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  maybe_properties[property_id]=property_value;
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  maybe_properties[property_id2]=property_value2;
-
-
-  auto tt_ts=gid_delta_["TT_TS"].get<uint64_t>();
-  auto tt_te=gid_delta_["TT_TE"].get<uint64_t>();
-  //TODO edges
-
-  auto new_vertex=HistoryVertex(Gid::FromUint(gid),tt_ts,tt_te);
-  new_vertex.labels=maybe_labels;
-  new_vertex.properties=maybe_properties;
-  new_vertex.in_edges=in_edges;
-  new_vertex.out_edges=out_edges;
-  
-  return new_vertex;
-}
-
-/**
- * @brief 
- * 
- * @param in_edges_ 历史顶点的入边
- * @param edge_types 需要筛选的边的类型
- * @return Result<std::vector<EdgeAccessor>> 返回边的访问
- */
-Result<std::vector<EdgeAccessor>> Storage::Accessor::Edges(std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> &edges_,const std::vector<EdgeTypeId> &edge_types,storage::Gid gid,bool from,std::optional<storage::Gid> existing_gid){
-  std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> edges;
-  {
-    if (edge_types.empty() & !existing_gid) {
-      edges = edges_;
-    } else {
-      for (const auto &item : edges_) {
-        const auto &[edge_type, expand_vertex, edge] = item;
-        if (existing_gid && expand_vertex->gid != *existing_gid) continue;
-        if (!edge_types.empty() && std::find(edge_types.begin(), edge_types.end(), edge_type) == edge_types.end())
-          continue;
-        edges.push_back(item);
-      }
-    }
-  }
-  std::vector<EdgeAccessor> ret;
-  ret.reserve(edges.size());
-  for (const auto &item : edges) {
-    const auto &[edge_type, expand_vertex, edge] = item;
-    // EdgeAccessor(edge, edge_type, expand_vertex,expand_vertex, &transaction_, &storage_->indices_,
-    //                   &storage_->constraints_, config_);
-    storage::Gid from_gid=from?expand_vertex->gid:gid;
-    storage::Gid to_gid=from?gid:expand_vertex->gid;
-    // std::cout<<"from gid:"<<from_gid.AsUint()<<" "<<to_gid.AsUint()<<"\n";
-    // EdgeAccessor(edge, edge_type, expand_vertex,expand_vertex, &transaction_, &storage_->indices_,
-    //                   &storage_->constraints_,from_gid,to_gid,config_);
-    ret.emplace_back(edge, edge_type, expand_vertex,expand_vertex, &transaction_, &storage_->indices_,
-                      &storage_->constraints_, from_gid,to_gid,config_);
-    // ret.emplace_back(edge, edge_type, expand_vertex,expand_vertex, &transaction_, &storage_->indices_,
-    //                   &storage_->constraints_,config_);
-  
-  }
-
-  //当前节点 to_vertex没有 应该不受影响
-  return std::move(ret);
-}
-
-/**
- * @brief v3.0
- * 
- * @param another 
- * @param index 
- * @return storage::HistoryEdge 
- */
-storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromDelta(const EdgeAccessor &another,int index){
-  auto deltas=another.edge_.ptr->delta;
-  // std::map<PropertyId, PropertyValue> PropertyStore::Properties()
-  // wzy edit no-prop-edge-version
-  // auto maybe_properties=another.edge_.ptr->properties.Properties(); //before
-  std::map<PropertyId, PropertyValue> maybe_properties;
-  //wzy end
-  //dead info
-  int index_=0;
-  auto tt_ts=another.edge_.ptr->transaction_st;
-  // auto tt_te=another.edge_.ptr->tt_te;//original
-  // auto tt_te=another.tt_te();
-  auto tt_te=(uint64_t)std::numeric_limits<int64_t>::max();//wzy 0512
-  while (deltas != nullptr) {
-    if(index==0) break;
-    switch (deltas->action) {
-      case storage::Delta::Action::DELETE_OBJECT:
-      case storage::Delta::Action::RECREATE_OBJECT:  {
-        tt_ts=deltas->transaction_st;
-        tt_te=deltas->commit_timestamp;
-        break;
-      }
-      case storage::Delta::Action::SET_PROPERTY: {
-        // wzy begin no-prop
-        // auto property_value =deltas->property.value;
-        // if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[deltas->property.key]=property_value;
-        // else{
-        //   maybe_properties[deltas->property.key]=storage::PropertyValue("NULL");;
-        // }
-        // wzy end
-        tt_ts=deltas->transaction_st;
-        tt_te=deltas->commit_timestamp;
-        break;
-      }
-      default:break;
-    }
-    //reconstruct end
-    index_++;
-    if(index_==index) break;
-    // Move to the next delta.
-    deltas = deltas->next.load(std::memory_order_acquire);    
-  }
-  //TT_TS TT_TE
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  
-  auto property_value = storage::PropertyValue((int64_t)tt_ts);
-  maybe_properties[property_id]=property_value;
-  auto property_value2 = storage::PropertyValue((int64_t)tt_te);
-  maybe_properties[property_id2]=property_value2;
-
-  auto history_edge=HistoryEdge(another.edge_.ptr->gid,tt_ts,tt_te,another.edge_.ptr->from_gid,another.edge_.ptr->to_gid,another.EdgeType(),nullptr);
-  history_edge.properties=maybe_properties;
-  return history_edge;
-}
-
-/**
- * @brief v3.0 
- * 
- * @param another 
- * @param gid_delta_ 
- * @return storage::HistoryEdge 
- */
 storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromKV(const EdgeAccessor &another,nlohmann::json gid_delta_){
   auto maybe_properties=another.edge_.ptr->properties.Properties();
   auto from_gid=another.FromVertex().Gid();
@@ -1447,13 +708,6 @@ storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromKV(const EdgeAccess
   return history_edge;
 }
 
-/**
- * @brief v3.0 
- * 
- * @param edge_ 
- * @param gid_delta_ 
- * @return storage::HistoryEdge 
- */
 storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromKV(storage::HistoryEdge edge_,nlohmann::json gid_delta_){
   auto maybe_properties=edge_.properties;
   //properties 
@@ -1490,467 +744,32 @@ storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromKV(storage::History
   return history_edge;
 }
 
-/**
- * @brief v3.0
- * 
- * @param another 
- * @param gid_delta_ 
- * @return storage::HistoryEdge 
- */
-storage::HistoryEdge Storage::Accessor::CreateAnchorEdge(const EdgeAccessor &another,nlohmann::json gid_delta_){
-  std::map<PropertyId, PropertyValue> maybe_properties;
-  //properties 
-  // wzy begin no-prop-ver
-  // if(gid_delta_.find("SP")!=gid_delta_.end()){
-  //   auto history_props_=gid_delta_["SP"];
-  //   for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-  //     auto key = it_iter.key();
-  //     auto value=it_iter.value();
-  //     auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-  //     auto property_value = DeserializePropertyValue(value);//query::serialization::
-  //     if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[property_id]=property_value;
-  //     else maybe_properties[property_id]=storage::PropertyValue("NULL");
-  //   }
-  // }
-  // wzy end
-  
-  //TT_TS TT_TE
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  maybe_properties[property_id]=property_value;
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  maybe_properties[property_id2]=property_value2;
-
-
-  auto tt_ts=gid_delta_["TT_TS"].get<uint64_t>();
-  auto tt_te=gid_delta_["TT_TE"].get<uint64_t>();
-  auto history_edge=HistoryEdge(another.edge_.ptr->gid,tt_ts,tt_te,another.edge_.ptr->from_gid,another.edge_.ptr->to_gid,another.EdgeType(),nullptr);
-  history_edge.properties=maybe_properties;
-  return history_edge;
-}
-
-//创建历史边
-storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromDelta(const EdgeAccessor &another){
-  auto tt_te=(uint64_t)std::numeric_limits<int64_t>::max();//wzy 0512
-  auto history_edge=HistoryEdge(another.edge_.ptr->gid,another.edge_.ptr->transaction_st,tt_te,another.edge_.ptr->from_gid,another.edge_.ptr->to_gid,another.EdgeType(),another.edge_.ptr->delta);
-  history_edge.properties=another.edge_.ptr->properties.Properties();
-  return history_edge;
-}
-
-// //根据delta创建历史边
-storage::HistoryEdge Storage::Accessor::CreateHistoryEdgeFromDelta(storage::HistoryEdge another,int index){
-  auto deltas=another.delta;
-  //Current info
-  auto maybe_properties=another.properties;
-  //dead info
-  int index_=0;
-  auto tt_ts=another.tt_ts;
-  auto tt_te=another.tt_te;
-  while (deltas != nullptr) {
-    if(index==0) break;
-    switch (deltas->action) {
-      case storage::Delta::Action::DELETE_OBJECT:
-      case storage::Delta::Action::RECREATE_OBJECT:  {
-        tt_ts=deltas->transaction_st;
-        tt_te=deltas->commit_timestamp;
-        break;
-      }
-      case storage::Delta::Action::SET_PROPERTY: {
-        auto property_value =deltas->property.value;
-        if(property_value.type()!=storage::PropertyValue::Type::Null) maybe_properties[deltas->property.key]=property_value;
-        else{
-          maybe_properties[deltas->property.key]=storage::PropertyValue("NULL");;
-        }
-        tt_ts=deltas->transaction_st;
-        tt_te=deltas->commit_timestamp;
-        break;
-      }
-      default:break;
-    }
-    //reconstruct end
-    index_++;
-    if(index_==index) break;
-    // Move to the next delta.
-    deltas = deltas->next.load(std::memory_order_acquire);    
-  }
-  //TT_TS TT_TE
-  //Gid::FromUint
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  
-  auto property_value = storage::PropertyValue((int64_t)tt_ts);
-  maybe_properties[property_id]=property_value;
-  auto property_value2 = storage::PropertyValue((int64_t)tt_te);
-  maybe_properties[property_id2]=property_value2;
-
-  //TODO edges
-  auto history_edge=HistoryEdge(another.gid,tt_ts,tt_te,another.from_gid,another.to_gid,another.type,another.delta);
-  history_edge.properties=maybe_properties;
-  return history_edge;
-}
-
-
-/**
- * @brief v2.0 还原历史节点中删除的还没有写入kv中的边
- * 
- * @param vertex 
- * @param delta 
- * @param types 
- * @return std::list<storage::HistoryEdge*> 
- */
-std::list<storage::HistoryEdge> Storage::Accessor::CreateHistoryDeleteEdgeFromVertex(const Delta* delta,std::string types){
-  std::list<storage::HistoryEdge> history_edges;
-  while (delta != nullptr) {
-    switch (delta->action) {
-      case storage::Delta::Action::ADD_OUT_EDGE:
-      case storage::Delta::Action::ADD_IN_EDGE:{
-        auto edge_id=delta->vertex_edge.edge.ptr->gid;
-        auto type=delta->action==storage::Delta::Action::ADD_OUT_EDGE?"AOE":"AIE";
-        auto edge_type=delta->vertex_edge.edge_type;
-        auto from_gid=delta->vertex_edge.edge.ptr->from_gid;
-        auto to_gid=delta->vertex_edge.edge.ptr->to_gid;
-        auto tt_ts=delta->transaction_st;
-        // auto tt_te=delta->commit_timestamp;
-        auto e_delta=delta->vertex_edge.edge.ptr->delta;
-        if(type==types){
-          auto history_edge=HistoryEdge(edge_id,tt_ts,tt_ts,from_gid,to_gid,edge_type,e_delta);
-          history_edge.properties=delta->vertex_edge.edge.ptr->properties.Properties();
-          history_edges.push_back(history_edge);
-        }
-        break;
-      }
-      default:break;
-    }
-    delta = delta->next.load(std::memory_order_acquire);    
-  }
-  return history_edges;
-}
-
-
-Gid Storage::Accessor::IdToGid(const uint64_t key) { return Gid::FromUint(key); }
-
-// std::optional<EdgeAccessor> Storage::Accessor::FindEdge(Gid gid) {
-//   auto edge_acc = storage_->edges_.access();
-//   auto edge = edge_acc.find(gid);
-//   if (edge == edge_acc.end()) return std::nullopt;
-//   // return edge;//VertexAccessor::Create(&*it, &transaction_, &storage_->indices_, &storage_->constraints_, config_, view);
-//   // return EdgeAccessor(edge, edge_type, from_vertex, to_vertex, &transaction_, &storage_->indices_,
-//   //                     &storage_->constraints_, config_);
-// }
-
-void Storage::Accessor::InitVertex(storage::Vertex *his_vertex,std::vector<storage::LabelId> &labels,std::vector<std::pair<uint64_t,uint64_t>> &labels_tt,std::map<storage::PropertyId, std::tuple<storage::PropertyValue,uint64_t,uint64_t>> &props_tt,uint64_t tt_ts,uint64_t tt_te){
-  //init labels 
-  labels=his_vertex->labels;
-  for(int j=0;j<labels.size();j++){
-    labels_tt.emplace_back(tt_ts,tt_te);
-  }
-  //init props
-  auto maybe_properties=his_vertex->properties.Properties();//std::map<PropertyId, PropertyValue>
-  for (const auto &prop : maybe_properties ){
-    if(props_tt.find(prop.first)==props_tt.end()){
-      props_tt[prop.first]=std::tuple<storage::PropertyValue,uint64_t,uint64_t>();
-    }
-    props_tt[prop.first]=std::tuple<storage::PropertyValue,uint64_t,uint64_t>{prop.second,tt_ts,tt_te};
-  }
-}
-
-void Storage::Accessor::InitVertex(storage::Vertex *vertex,history_delta::historyContextOnce &historyContext,bool delete_flag,std::vector<int> dead_deltas,std::vector<nlohmann::json> deleted_kv){
-  if(!delete_flag){
-    std::cout<<"init vertex 1 begin\n";
-    InitVertex(vertex,historyContext.labels,historyContext.labels_tt,historyContext.props_tt,vertex->transaction_st,(uint64_t)std::numeric_limits<int64_t>::max());
-    std::cout<<"init vertex 1 done\n";
-    return;
-  }
-  if(dead_deltas.size()!=0){
-    std::cout<<"init vertex 2 begin\n";
-    auto deltas=vertex->delta;
-    //dead info
-    int index=dead_deltas[0];
-    int index_=0;
-    uint64_t tt_ts=vertex->transaction_st;
-    uint64_t tt_te=std::numeric_limits<uint64_t>::max();
-    while (deltas != nullptr) {
-      switch (deltas->action) {
-        case storage::Delta::Action::SET_PROPERTY: {
-          vertex->properties.SetProperty(deltas->property.key,deltas->property.value);
-          break;
-        }
-        case storage::Delta::Action::ADD_LABEL:
-        case storage::Delta::Action::REMOVE_LABEL: {
-          auto label_id =deltas->label;
-          auto it = std::find(vertex->labels.begin(), vertex->labels.end(), label_id);
-          if (deltas->action==storage::Delta::Action::ADD_LABEL) {
-            if (it != vertex->labels.end()) continue;
-            vertex->labels.push_back(label_id);
-          } else {
-            if (it == vertex->labels.end()) continue;
-            std::swap(*it, vertex->labels.back());
-            vertex->labels.pop_back();
-          }
-          break;
-        }
-        default:break;
-      }
-      tt_ts=deltas->transaction_st;
-      tt_te=deltas->commit_timestamp;
-      //reconstruct end
-      if(index_+1==index) break;
-      // Move to the next delta.
-      deltas = deltas->next.load(std::memory_order_acquire);    
-      index_++;
-    }
-    if(index_+1==index){
-      InitVertex(vertex,historyContext.labels,historyContext.labels_tt,historyContext.props_tt,tt_ts,tt_te);
-      std::cout<<"init vertex 2 done\n";
-      return;
-    }
-    // std::cout<<"init vertex 2 done1\n";
-    // InitVertex(vertex,historyContext.labels,historyContext.labels_tt,historyContext.props_tt,deltas->transaction_st,deltas->commit_timestamp);
-    // std::cout<<"init vertex 2 done\n";
-  }
-  if(deleted_kv.size()!=0){
-    std::cout<<"init vertex 3 begin\n";
-    auto gid_delta_=deleted_kv[0];
-    //properties 
-    if(gid_delta_.find("SP")!=gid_delta_.end()){
-      auto history_props_=gid_delta_["SP"];
-      for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-        auto key = it_iter.key();
-        auto value=it_iter.value();
-        auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-        auto property_value = DeserializePropertyValue(value);//query::serialization::
-        vertex->properties.SetProperty(property_id,property_value);
-      }
-    }
-    
-    //labels 
-    if(gid_delta_.find("L")!=gid_delta_.end()){
-      auto history_labels_=gid_delta_["L"].get<std::vector<std::pair<std::string,std::string>>>();;
-      for (auto [key,value]:history_labels_){
-        auto label_id = LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-        auto it = std::find(vertex->labels.begin(), vertex->labels.end(), label_id);
-        if (key=="AL") {
-          if (it != vertex->labels.end()) continue;
-          vertex->labels.push_back(label_id);
+Result<std::vector<EdgeAccessor>> Storage::Accessor::Edges(std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> &edges_,const std::vector<EdgeTypeId> &edge_types,storage::Gid gid,bool from,std::optional<storage::Gid> existing_gid){
+    std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> edges;
+    {
+        if (edge_types.empty() & !existing_gid) {
+            edges = edges_;
         } else {
-          if (it == vertex->labels.end()) continue;
-          std::swap(*it, vertex->labels.back());
-          vertex->labels.pop_back();
-        }
-      }
-    }
-    InitVertex(vertex,historyContext.labels,historyContext.labels_tt,historyContext.props_tt,gid_delta_["TT_TS"].get<uint64_t>(),gid_delta_["TT_TE"].get<uint64_t>());
-    std::cout<<"init vertex 3 done\n";
-    return;
-  }
-  return;
-}
-
-void Storage::Accessor::getHistoryVertexFromDelta(storage::Vertex *current_vertex,std::vector<int> dead_deltas,history_delta::historyContextOnce &historyContext){
-  if(dead_deltas.size()==0) return;
-  auto max_index=0;
-  auto begin_index=0;
-  for (int i=0;i<dead_deltas.size();i++){
-    auto index_=0;
-    begin_index=max_index;
-    max_index=dead_deltas[i];
-    auto deltas=current_vertex->delta;
-    while (deltas != nullptr) {
-      if(!(index_>=begin_index & index_<max_index)){
-        deltas = deltas->next.load(std::memory_order_acquire);    
-        index_++;
-        continue;
-      }
-      switch (deltas->action) {
-        case storage::Delta::Action::SET_PROPERTY: {
-          auto set_prop_id=deltas->property.key;
-          auto set_prop_value=deltas->property.value;
-          for(auto &prop:historyContext.props_tt){//propid value,tt_ts,tt_te
-            auto prop_id=prop.first;
-            if(prop_id!=set_prop_id){
-              auto [a1, a2, a3]=prop.second;
-              prop.second=std::tuple<storage::PropertyValue,uint64_t,uint64_t>{a1,deltas->transaction_st,a3};
-            }else{
-              auto [value,tt_ts,tt_te]=prop.second;//value,tt_ts,tt_te
-              auto property_name = storage_->name_id_mapper_.IdToName(set_prop_id.AsUint())+"["+std::to_string(tt_ts)+","+std::to_string(tt_te)+"]";
-              auto after_prop_id= PropertyId::FromUint(storage_->name_id_mapper_.NameToId(property_name));
-              historyContext.props_tt[after_prop_id]=prop.second;//std::tuple<storage::PropertyValue,uint64_t,uint64_t>{value,tt_ts,tt_te};
-              historyContext.props_tt[set_prop_id]=std::tuple<storage::PropertyValue,uint64_t,uint64_t>{set_prop_value,deltas->transaction_st,deltas->commit_timestamp};
+            for (const auto &item : edges_) {
+                const auto &[edge_type, expand_vertex, edge] = item;
+                if (existing_gid && expand_vertex->gid != *existing_gid) continue;
+                if (!edge_types.empty() && std::find(edge_types.begin(), edge_types.end(), edge_type) == edge_types.end())
+                    continue;
+                edges.push_back(item);
             }
-          }
-          break;
         }
-        case storage::Delta::Action::ADD_LABEL:
-        case storage::Delta::Action::REMOVE_LABEL: {
-          auto label_id =deltas->label;
-          auto it = std::find(historyContext.labels.begin(), historyContext.labels.end(), label_id);
-          if (deltas->action==storage::Delta::Action::ADD_LABEL) {
-            if (it != historyContext.labels.end()) continue;
-            for(auto j=0;j<historyContext.labels_tt.size();j++){
-              auto label_tt=historyContext.labels_tt[j];
-              auto label=historyContext.labels[j];
-              if(std::find(historyContext.remove_labels.begin(), historyContext.remove_labels.end(), label) == historyContext.remove_labels.end()){
-                label_tt=std::make_pair(deltas->transaction_st,label_tt.second);
-              }
-            }
-            historyContext.labels.push_back(label_id);
-            historyContext.labels_tt.emplace_back(deltas->transaction_st,deltas->commit_timestamp);
-          }else{
-            historyContext.remove_labels.emplace_back(label_id);
-          } 
-          break;
-        }
-        default:break;
-      }
-      //reconstruct end
-      if(index_+1==max_index) break;
-      // Move to the next delta.
-      deltas = deltas->next.load(std::memory_order_acquire);    
-      index_++;
     }
-  }
-  return ;
-}
-
-void Storage::Accessor::getHistoryVertexFromKV(std::vector<nlohmann::json> deleted_kv,history_delta::historyContextOnce &historyContext){
-  if(deleted_kv.size()==0) return;
-  auto max_index=0;
-  auto begin_index=0;
-  for (int i=0;i<deleted_kv.size();i++){
-    auto gid_delta_=deleted_kv[i];
-    //properties
-    auto tt_ts=gid_delta_["TT_TS"].get<uint64_t>();
-    auto tt_te=gid_delta_["TT_TS"].get<uint64_t>();
-    if(gid_delta_.find("SP")!=gid_delta_.end()){
-      auto history_props_=gid_delta_["SP"];
-      for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-        auto key = it_iter.key();
-        auto value=it_iter.value();
-        auto set_prop_id = storage::PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-        auto set_prop_value = DeserializePropertyValue(value);//query::serialization:
-        for(auto &prop:historyContext.props_tt){
-          auto prop_id=prop.first;
-          if(prop_id!=set_prop_id){
-            auto [a1, a2, a3]=prop.second;
-            prop.second=std::tuple<storage::PropertyValue,uint64_t,uint64_t>{a1,tt_ts,a3};
-          }else{
-            auto [value,tt_ts,tt_te]=prop.second;//value,tt_ts,tt_te
-            auto property_name = storage_->name_id_mapper_.IdToName(set_prop_id.AsUint())+"["+std::to_string(tt_ts)+","+std::to_string(tt_te)+"]";
-            auto after_prop_id= PropertyId::FromUint(storage_->name_id_mapper_.NameToId(property_name));
-            historyContext.props_tt[after_prop_id]=prop.second;//std::tuple<storage::PropertyValue,uint64_t,uint64_t>{value,tt_ts,tt_te};
-           
-            historyContext.props_tt[set_prop_id]=std::tuple<storage::PropertyValue,uint64_t,uint64_t>{set_prop_value,tt_ts,tt_te};
-          }
-        }
-      }
+    std::vector<EdgeAccessor> ret;
+    ret.reserve(edges.size());
+    for (const auto &item : edges) {
+        const auto &[edge_type, expand_vertex, edge] = item;
+        storage::Gid from_gid=from?expand_vertex->gid:gid;
+        storage::Gid to_gid=from?gid:expand_vertex->gid;
+        ret.emplace_back(edge, edge_type, expand_vertex,expand_vertex, &transaction_, &storage_->indices_,
+                         &storage_->constraints_, from_gid,to_gid,config_);
     }
-  
-    //labels 
-    if(gid_delta_.find("L")!=gid_delta_.end()){
-      auto history_labels_=gid_delta_["L"].get<std::vector<std::pair<std::string,std::string>>>();;
-      for (auto [key,value]:history_labels_){
-        auto label_id = storage::LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-        auto it = std::find(historyContext.labels.begin(), historyContext.labels.end(), label_id);
-        if (key=="AL") {
-          if (it != historyContext.labels.end()) continue;
-          for(auto j=0;j<historyContext.labels_tt.size();j++){
-            auto label_tt=historyContext.labels_tt[j];
-            auto label=historyContext.labels[j];
-            if(std::find(historyContext.remove_labels.begin(), historyContext.remove_labels.end(), label) == historyContext.remove_labels.end()){
-              label_tt=std::make_pair(tt_ts,label_tt.second);
-            }
-          }
-          historyContext.labels.push_back(label_id);
-          historyContext.labels_tt.emplace_back(tt_ts,tt_te);
-        } else {
-          historyContext.remove_labels.emplace_back(label_id);
-        }
-      }
-    }
-  }
-  return ;
-}
 
-VertexAccessor Storage::Accessor::getHistoryVertexOnce(const VertexAccessor &another,std::vector<int> dead_deltas,std::vector<nlohmann::json> deleted_kv,history_delta::historyContextOnce& historyContext,bool delete_flag){
-  Delta *delta = nullptr;
-  auto deltas=another.vertex_->delta;
-  //复制新的veretx
-  auto current_vertex = new Vertex(another.vertex_->gid,deltas,another.vertex_->transaction_st);
-  current_vertex->labels=another.vertex_->labels;
-  auto maybe_properties=another.vertex_->properties.Properties();
-  for (const auto &prop : maybe_properties ){
-    current_vertex->properties.SetProperty(prop.first,prop.second);
-  }
-  current_vertex->in_edges=another.vertex_->in_edges;
-  current_vertex->out_edges=another.vertex_->out_edges;
-  
-  //获取历史数据
-  InitVertex(current_vertex,historyContext,delete_flag,dead_deltas,deleted_kv);
-  std::cout<<"init done\n";
-  getHistoryVertexFromDelta(current_vertex,dead_deltas,historyContext);
-  getHistoryVertexFromKV(deleted_kv,historyContext);
-  
-  //重新构造新的节点
-  current_vertex->labels=historyContext.labels;
-  // current_vertex->labels_tt=historyContext.labels_tt;
-  current_vertex->properties.ClearProperties();
-  for (auto &[key,values] : historyContext.props_tt ){
-    auto &[value,ts,te]=values;
-    value.tt_ts=ts;
-    value.tt_te=te;
-    current_vertex->properties.SetProperty(key,value);
-  }
-  return VertexAccessor{current_vertex, another.transaction_, another.indices_, another.constraints_, another.config_};
-}
-
-VertexAccessor Storage::Accessor::CreateHistoryVertex3(uint64_t gid,nlohmann::json gid_delta_,history_delta::historyContext& historyContext_){
-  auto tt_ts=gid_delta_["TT_TS"].get<uint64_t>();
-  Delta *delta = nullptr;
-  auto vertex = new Vertex(Gid::FromUint(gid),delta,tt_ts);
-  // auto gid_delta_=gid_delta["RECREATE_OBJECT"];
-  //deleted info
-  //properties 
-  if(gid_delta_.find("SET_PROPERTY")!=gid_delta_.end()){
-    auto history_props_=gid_delta_["SET_PROPERTY"];
-    for(auto it_iter= history_props_.begin(); it_iter != history_props_.end(); ++it_iter){
-      auto key = it_iter.key();
-      auto value=it_iter.value();
-      auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId(key));
-      auto property_value = DeserializePropertyValue(value);//query::serialization::
-      vertex->properties.SetProperty(property_id,property_value);
-    }
-  }
-  
-  //labels 
-  if(gid_delta_.find("LABEL")!=gid_delta_.end()){
-    auto history_labels_=gid_delta_["LABEL"].get<std::vector<std::pair<std::string,std::string>>>();;
-    for (auto [key,value]:history_labels_){
-       auto label_id = LabelId::FromUint(storage_->name_id_mapper_.NameToId(value));
-       auto it = std::find(vertex->labels.begin(), vertex->labels.end(), label_id);
-      if (key=="ADD_LABEL") {
-        if (it != vertex->labels.end()) continue;
-        vertex->labels.push_back(label_id);
-      } else {
-        if (it == vertex->labels.end()) continue;
-        std::swap(*it, vertex->labels.back());
-        vertex->labels.pop_back();
-      }
-    }
-  }
-
-  //TT_TS TT_TE
-  auto property_id = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_ts"));
-  auto property_value = storage::PropertyValue(gid_delta_["TT_TS"].get<int64_t>());
-  vertex->properties.SetProperty(property_id,property_value);
-
-  auto property_id2 = PropertyId::FromUint(storage_->name_id_mapper_.NameToId("transaction_te"));
-  auto property_value2 = storage::PropertyValue(gid_delta_["TT_TE"].get<int64_t>());
-  vertex->properties.SetProperty(property_id2,property_value2);
-
-  //TODO edges
-  return VertexAccessor{vertex, &transaction_, &storage_->indices_, &storage_->constraints_, config_};
+    return std::move(ret);
 }
 
 std::optional<VertexAccessor> Storage::Accessor::FindDeleteVertex(Gid gid, View view){
@@ -1960,7 +779,9 @@ std::optional<VertexAccessor> Storage::Accessor::FindDeleteVertex(Gid gid, View 
   return VertexAccessor::Creates(&*it, &transaction_, &storage_->indices_, &storage_->constraints_, config_, view);
 }
 
-//hjm end
+Gid Storage::Accessor::IdToGid(const uint64_t key) { return Gid::FromUint(key); }
+
+
 VertexAccessor Storage::Accessor::CreateVertex() {
   OOMExceptionEnabler oom_exception;
   auto gid = storage_->vertex_id_.fetch_add(1, std::memory_order_acq_rel);
@@ -2144,8 +965,7 @@ Result<std::optional<std::pair<VertexAccessor, std::vector<EdgeAccessor>>>> Stor
   if (!PrepareForWrite(&transaction_, vertex_ptr)) return Error::SERIALIZATION_ERROR;
 
   MG_ASSERT(!vertex_ptr->deleted, "Invalid database state!");
-  
-  //hjm begin set transaction st
+
   auto ts=vertex_ptr->transaction_st;
   auto before_delta=vertex_ptr->delta;
   while (before_delta != nullptr){
@@ -2169,22 +989,20 @@ Result<std::optional<std::pair<VertexAccessor, std::vector<EdgeAccessor>>>> Stor
       if(ts==transaction_.transaction_id){//ts >= kTransactionInitialId & 
         ts=before_delta->transaction_st;
       }else{
-        std::cout<<"SERIALIZATION_ERROR"<<ts<<" "<<transaction_.transaction_id<<"\n";
         return Error::SERIALIZATION_ERROR;
       }
     }
     break;
   }
-  //hjm end
+
 
   auto delta=CreateAndLinkDelta(&transaction_, vertex_ptr, Delta::RecreateObjectTag());
   vertex_ptr->deleted = true;
 
-  //hjm begin
+
   delta->transaction_st=ts;
   //save vertex to restore
   nlohmann::json data = nlohmann::json::object();
-  //labels
   auto maybe_labels = vertex_ptr->labels;
   auto add_labels=std::vector<std::pair<std::string,std::string>>();
   for (const auto &label : maybe_labels) {
@@ -2207,7 +1025,6 @@ Result<std::optional<std::pair<VertexAccessor, std::vector<EdgeAccessor>>>> Stor
     auto print=prinfVertex(vertex_ptr->gid.AsUint(),ts,maybe_properties,maybe_labels);
     transaction_.prinfVertex_.emplace_back(print);
   }
-  //hjm end
 
   return std::make_optional<ReturnType>(
       VertexAccessor{vertex_ptr, &transaction_, &storage_->indices_, &storage_->constraints_, config_, true},
@@ -2249,7 +1066,6 @@ Result<EdgeAccessor> Storage::Accessor::CreateEdge(VertexAccessor *from, VertexA
   }
 
 
-  //hjm begin set from veretx transaction st
   auto from_ts=from_vertex->ve_tt_ts;
   auto before_delta=from_vertex->delta;
   while (before_delta != nullptr){

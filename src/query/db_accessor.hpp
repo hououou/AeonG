@@ -87,8 +87,7 @@ class EdgeAccessor final {
   int64_t CypherId() const { return impl_.Gid().AsInt(); }
 
   storage::Gid Gid() const noexcept { return impl_.Gid(); }
-  
-  //hjm begin
+
   storage::Gid fromGid()const noexcept { return impl_.fromGid(); }
   storage::Gid toGid()const noexcept { return impl_.toGid(); }
   uint64_t transaction_st(){return impl_.transaction_st();}
@@ -97,7 +96,6 @@ class EdgeAccessor final {
   storage::Delta *getDeltas(){
     return impl_.getDeltas();
   }
-  //hjm end
 
   bool operator==(const EdgeAccessor &e) const noexcept { return impl_ == e.impl_; }
 
@@ -146,7 +144,7 @@ class VertexAccessor final {
     return impl_.ClearProperties();
   }
 
- //hjm begin
+
   storage::Result<std::map<storage::PropertyId, storage::PropertyValue>> ClearProperties2() {
     return impl_.ClearProperties2();
   }
@@ -175,7 +173,6 @@ class VertexAccessor final {
     return impl_.getOutEdges();
   }
 
-  //hjm end
 
   auto InEdges(storage::View view, const std::vector<storage::EdgeTypeId> &edge_types) const
       -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *impl_.InEdges(view)))> {
@@ -217,11 +214,9 @@ class VertexAccessor final {
   int64_t CypherId() const { return impl_.Gid().AsInt(); }
 
   storage::Gid Gid() const noexcept { return impl_.Gid(); }
-  
-  //hjm begin
+
   uint64_t transaction_st(){return impl_.transaction_st();};
   uint64_t tt_te(){return impl_.tt_te();}
-  //hjm end
   bool operator==(const VertexAccessor &v) const noexcept {
     static_assert(noexcept(impl_ == v.impl_));
     return impl_ == v.impl_;
@@ -279,7 +274,7 @@ class DbAccessor final {
   }
 
   
-  //hjm begin
+
   void ClearHistory(){
     return accessor_->ClearHistory();
   }
@@ -313,14 +308,6 @@ class DbAccessor final {
     return accessor_->saveHistoryVertexFlag(gid, c_ts,c_te);
   }
 
-  /**
-   * 由现有节点复制成新的节点
-   * 
-   * */
-  //用来创建数据库中的节点+deleted history
-  // std::tuple<storage::Vertex*,uint64_t,uint64_t> GetHistoryVertexFromDelta(const storage::VertexAccessor &another,int index){
-  //   return accessor_->GetHistoryVertexFromDelta(another,index);
-  // }
   static EdgeAccessor MakeEdgeAccessor(const storage::EdgeAccessor impl) { return EdgeAccessor(impl); }
   
 
@@ -331,9 +318,7 @@ class DbAccessor final {
     return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
   }
 
-  // storage::Result<std::vector<EdgeAccessor>> Edges(std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> &edges_,const std::vector<storage::EdgeTypeId> &edge_types){
-  //   return accessor_->Edges(edges_,edge_types);
-  // }
+  storage::Gid IdToGid(const uint64_t key) { return accessor_->IdToGid(key); }
   storage::HistoryVertex CreateHistoryVertexFromKV(const storage::HistoryVertex another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
     return accessor_->CreateHistoryVertexFromKV(another,gid_delta_,historyContext_);
   }
@@ -342,124 +327,26 @@ class DbAccessor final {
     return accessor_->CreateHistoryVertexFromKV(another,gid_delta_,historyContext_);
   }
 
-  storage::HistoryVertex CreateHistoryVertexFromDelta(const storage::VertexAccessor &another,int index,history_delta::historyContext& historyContext_){
-    return accessor_->CreateHistoryVertexFromDelta(another,index,historyContext_);
-  }
-
-  storage::HistoryVertex CreateHistoryVertexFromDelta2(const storage::VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & may_props,history_delta::historyContext& historyContext_){
+  storage::HistoryVertex CreateHistoryVertexFromDelta(const storage::VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & may_props,history_delta::historyContext& historyContext_){
     return accessor_->CreateHistoryVertexFromDelta(another,may_props,historyContext_);
   }
 
-
-  storage::HistoryVertex CreateAnchorVertex(uint64_t gid,nlohmann::json gid_delta_,std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> in_edges,std::vector<std::tuple<storage::EdgeTypeId, storage::Vertex *, storage::EdgeRef>> out_edges){
-    return accessor_->CreateAnchorVertex(gid,gid_delta_,in_edges,out_edges);
-  }
-  // storage::HistoryEdge* CreateHistoryEdgeFromKV(storage::HistoryEdge* another,nlohmann::json gid_delta_){
-  //   return accessor_->CreateHistoryEdgeFromKV(another,gid_delta_);
-  // }
-  // storage::HistoryEdge* CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another){
-  //   return accessor_->CreateHistoryEdgeFromDelta(another);
-  // }
-  // storage::HistoryEdge* CreateHistoryEdgeFromDelta(storage::HistoryEdge* &another,int index){
-  //   return accessor_->CreateHistoryEdgeFromDelta(another,index);
-  // }
-
- 
-  // storage::HistoryEdge CreateHistoryEdgeFromKV(storage::HistoryEdge another,nlohmann::json gid_delta_){
-  //   return accessor_->CreateHistoryEdgeFromKV(another,gid_delta_);
-  // }
-  storage::HistoryEdge CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another){
-    return accessor_->CreateHistoryEdgeFromDelta(another);
-  }
-  storage::HistoryEdge CreateHistoryEdgeFromDelta(storage::HistoryEdge &another,int index){
-    return accessor_->CreateHistoryEdgeFromDelta(another,index);
-  }
-  
-  //v3.0
-  storage::HistoryEdge CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another,int index){
-    return accessor_->CreateHistoryEdgeFromDelta(another,index);
-  }
   storage::HistoryEdge CreateHistoryEdgeFromKV(const storage::EdgeAccessor &another,nlohmann::json gid_delta_){
     return accessor_->CreateHistoryEdgeFromKV(another,gid_delta_);
   }
   storage::HistoryEdge CreateHistoryEdgeFromKV(storage::HistoryEdge edge_,nlohmann::json gid_delta_){
     return accessor_->CreateHistoryEdgeFromKV(edge_,gid_delta_);
   }
-  storage::HistoryEdge CreateAnchorEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_){
-    return accessor_->CreateAnchorEdge(another,gid_delta_);
-  }
-    
 
-  // std::vector<storage::HistoryEdge*> CreateHistoryDeleteEdgeFromVertex(const storage::HistoryVertex* vertex){
-  //   return accessor_->CreateHistoryDeleteEdgeFromVertex(vertex);
-  // }
   std::optional<VertexAccessor> FindDeleteVertex(storage::Gid gid, storage::View view){
     auto maybe_vertex = accessor_->FindDeleteVertex(gid, view);
     if (maybe_vertex) return VertexAccessor(*maybe_vertex);
     return std::nullopt;
   }
 
-  std::list<storage::Gid> getdeletedvertex(){
-    return accessor_->getdeletedvertex();
-  }
-
-  // std::list<storage::Gid> getDeletedEdges(){
-  //   return accessor_->getDeletedEdges();
-  // }
-
-  std::list<storage::Vertex*> getdeletedvertex2(){
-    return accessor_->getdeletedvertex2();
-  }
-  //根据kv数据创建边
-  EdgeAccessor CreateHistoryEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
-    auto maybe_edge=accessor_->CreateHistoryEdge(another,gid_delta_,historyContext_);
-    return EdgeAccessor(maybe_edge);
-  }
-  //根据delta数据创建边
-  
-   EdgeAccessor CreateHistoryEdge2(const storage::EdgeAccessor &another,int index,history_delta::historyContext &historyContext_){
-    auto maybe_edge=accessor_->CreateHistoryEdge2(another,index,historyContext_);
-    return EdgeAccessor(maybe_edge);
-  }
-
-  // auto CreateHistoryEdge2(const EdgeAccessor &another,int index,history_delta::historyContext& historyContext_,std::map<uint64_t,std::vector<TypedValue> all_vertex_) const
-  //     -> storage::Result<decltype(iter::imap(MakeEdgeAccessor, *accessor_.CreateHistoryEdge2(const EdgeAccessor &another,int index,history_delta::historyContext& historyContext_,std::map<uint64_t,std::vector<TypedValue> all_vertex_)))> {
-  //   auto maybe_edges = accessor_.CreateHistoryEdge2(const EdgeAccessor &another,int index,history_delta::historyContext& historyContext_,std::map<uint64_t,std::vector<TypedValue> all_vertex_);
-  //   return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
-  // }
-
-  VertexAccessor getHistoryVertexOnce(const storage::VertexAccessor &another,std::vector<int> dead_deltas,std::vector<nlohmann::json> deleted_kv,history_delta::historyContextOnce& historyContext,bool delete_flag){
-    auto maybe_vertex=accessor_->getHistoryVertexOnce(another,dead_deltas,deleted_kv,historyContext,delete_flag);
-    return VertexAccessor(maybe_vertex);
-  }
-
-  VertexAccessor CreateHistoryVertex(const storage::VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){
-    auto maybe_vertex=accessor_->CreateHistoryVertex(another,gid_delta_,historyContext_);
-    return VertexAccessor(maybe_vertex);
-  }
-  
-  //数据中的节点+delta数据
-  VertexAccessor CreateHistoryVertex2(const storage::VertexAccessor &another,int index,history_delta::historyContext &historyContext_){
-    auto maybe_vertex=accessor_->CreateHistoryVertex2(another,index,historyContext_);
-    return VertexAccessor(maybe_vertex);
-  }
-  
-  //自行创建节点
-  VertexAccessor CreateHistoryVertex3(uint64_t gid,nlohmann::json delete_info,history_delta::historyContext &historyContext_){
-    auto maybe_vertex=accessor_->CreateHistoryVertex3(gid,delete_info,historyContext_);
-    return VertexAccessor(maybe_vertex);
-  }
-
   std::optional<history_delta::History_delta>& GetHistoryDelta(){
     return accessor_->GetHistoryDelta();
   }
-
-  storage::HistoryVertex CreateHistoryDelteVertex(uint64_t gid,nlohmann::json gid_delta_){
-    return accessor_->CreateHistoryDelteVertex(gid,gid_delta_);
-  }
-
-  storage::Gid IdToGid(const uint64_t key) { return accessor_->IdToGid(key); }
-  //hjm end;
 
   void FinalizeTransaction() { accessor_->FinalizeTransaction(); }
 

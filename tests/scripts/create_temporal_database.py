@@ -77,8 +77,9 @@ def get_space(folder_path, binary_type):
 def get_binary(args):
     if args.binary_type == "aeong":
         aeong = runners.Memgraph(args.aeong_binary, args.data_directory, not args.no_properties_on_edges,
-                                 memgraph_port=7687,
-                                 snapshot_interval_sec=30, memory_limit=0, anchor_num=10, real_time_flag=False)
+                                 memgraph_port=7687, snapshot_interval_sec=30, memory_limit=0,
+                                 anchor_num=args.anchor_num, retention_interval_sec=args.retention_period_sec,
+                                 real_time_flag=False)
         aeong.start_dataset()
         return aeong
     if args.binary_type == "tgql":
@@ -133,6 +134,12 @@ if __name__ == "__main__":
     parser.add_argument("--binary-type",
                         default="aeong",
                         help="aeong, tgql, clockg")
+    parser.add_argument("--anchor_num", type=int,
+                        default=10,
+                        help="interval between two anchors")
+    parser.add_argument("--retention-period-sec", type=int,
+                        default=0,
+                        help="Retention period duration (seconds)")
 
     args = parser.parse_args()
     parsed_args = vars(args)
@@ -152,9 +159,10 @@ if __name__ == "__main__":
     graph_op_ret = client.execute(file_path=args.graph_operation_cypher_path, num_workers=args.num_workers)
     end_time = int(time.time() * 1000000)
     if args.binary_type == "clockg":
-        #need time to store historical data
+        # need time to store historical data
         time.sleep(5 * 60)
     if args.binary_type == "aeong":
         time.sleep(60)
     aeong.stop()
-    print(graph_op_ret[0]['duration'] / graph_op_ret[0]['count'],get_space(args.data_directory,args.binary_type)/1024/1024,start_time,end_time)
+    print(graph_op_ret[0]['duration'] / graph_op_ret[0]['count'],
+          get_space(args.data_directory, args.binary_type) / 1024 / 1024, start_time, end_time)

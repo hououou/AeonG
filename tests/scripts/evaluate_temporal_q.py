@@ -53,6 +53,9 @@ if __name__ == "__main__":
     parser.add_argument("--no-properties-on-edges",
                         action="store_true",
                         help="disable properties on edges")
+    parser.add_argument("--storage-gc-cycle-sec", type=int,
+                        action="30",
+                        help="Storage garbage collector interval (in seconds).")
     parser.add_argument("--binary-type",
                         default="aeong",
                         help="aeong, tgql, clockg")

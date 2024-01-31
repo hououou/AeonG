@@ -1,11 +1,3 @@
-// Copyright 2021 Memgraph Ltd.
-//
-// Licensed as a Memgraph Enterprise file under the Memgraph Enterprise
-// License (the "License"); by using this file, you agree to be bound by the terms of the License, and you may not use
-// this file except in compliance with the License. You may obtain a copy of the License at https://memgraph.com/legal.
-//
-//
-
 #include "storage/v2/history_delta.hpp"
 #include "query/db_accessor.hpp"
 #include <cstring>
@@ -16,7 +8,6 @@
 #include "utils/settings.hpp"
 #include <json/json.hpp>
 #include "query/serialization/property_value.hpp"
-#include "storage/v2/storage.hpp"
 namespace history_delta {
 
 namespace {
@@ -125,13 +116,6 @@ int64_t swap64(const int64_t &v)
 }
 
 std::string uint_convert_to_string(const int64_t time,bool realTimeFlagConstant){
-   if(realTimeFlagConstant){
-    if(time>0){
-      return std::to_string(std::numeric_limits<uint64_t>::max()-time);
-    }else{
-      return std::to_string(-std::numeric_limits<uint64_t>::max()+time);
-    }
-  }else{
     auto size=sizeof(time);
     char *buffer = (char *)std::malloc(size);
     auto test=swap64(time);
@@ -139,18 +123,10 @@ std::string uint_convert_to_string(const int64_t time,bool realTimeFlagConstant)
     std::string start_str(buffer,size);
     std::free(buffer);
     return start_str;
-  }
 }
 
 std::tuple<uint64_t,int64_t,int64_t> string_convert_to_uint(std::string res,bool realTimeFlagConstant){
-  auto size=sizeof(int64_t);
-  if(realTimeFlagConstant){
-    auto split_info=splits(res,":");
-    auto gid=(uint64_t)std::stoi(split_info[1]);
-    auto ts=-(std::numeric_limits<uint64_t>::max()+std::stoll(split_info[2]));
-    auto te=-(std::numeric_limits<uint64_t>::max()+std::stoll(split_info[3]));
-    return std::make_tuple(gid,ts,te);
-  }else{
+    auto size=sizeof(int64_t);
     auto length=res.length();
     //获取gid
     size_t pos = res.find(":");
@@ -163,22 +139,14 @@ std::tuple<uint64_t,int64_t,int64_t> string_convert_to_uint(std::string res,bool
     char redo[size];
     char redo2[size];
     for(int i=0;i<size;i++){
-      redo[i]=redo_str1[i];
-      redo2[i]=redo_str2[i];
+        redo[i]=redo_str1[i];
+        redo2[i]=redo_str2[i];
     }
     auto ts = *(int64_t*) redo2;// redo_str;
     auto te = *(int64_t*) redo;
     ts=swap64(ts);
     te=swap64(te);
     return std::make_tuple(gid,ts,te);
-  }
-  // std::cout<<"string_convert_to_int: "<<ts<<" "<<te<<"\n";
-  // std::cout<<htonl(ts)<<" "<<htonl(te)<<"\n";
-  // auto split_info=splits(res,":");
-  // auto gid=(uint64_t)std::stoi(split_info[1]);
-  // auto ts=std::stoi(split_info[2]);
-  // auto te=std::stoi(split_info[3]);
-  // return std::make_tuple(gid,ts,te);
 }
 
 void combineVertex(nlohmann::json before_data,nlohmann::json &current_data){
@@ -226,106 +194,6 @@ void combineEdge(nlohmann::json before_data,nlohmann::json &current_data){
 }
 
 
-//获取delta顶点或者边的属性
-std::pair<bool,std::vector<int>> getDeadInfo(std::optional<query::VertexAccessor> current_vertex_,std::optional<storage::HistoryEdge*> current_edge_,uint64_t c_ts,uint64_t c_te,std::string types_,bool is_vertex){
-  //dead info 属性 label和边 不需要考虑
-  auto dead_deltas=std::vector<int>();//记住delta的下标
-  auto vertex_deltas=current_vertex_?current_vertex_->getDeltas():(*current_edge_)->delta;
-  auto tmp_ts=0;
-  auto tmp_te=0;
-  int index_=0;
-  auto need_deleted_flag=true;
-  bool delta_is_edge=false;
-  while (vertex_deltas != nullptr) {
-    delta_is_edge=false;
-    switch (vertex_deltas->action) {
-      case storage::Delta::Action::ADD_OUT_EDGE:
-      case storage::Delta::Action::REMOVE_OUT_EDGE: 
-      case storage::Delta::Action::ADD_IN_EDGE:
-      case storage::Delta::Action::REMOVE_IN_EDGE:{
-        delta_is_edge=true;
-        break;
-      }
-      default:break;
-    }
-    // auto prev = vertex_deltas->prev.Get();
-    // if(prev.type==storage::PreviousPtr::Type::DELTA){
-    //   switch (vertex_deltas->action) {
-    //     case storage::Delta::Action::ADD_OUT_EDGE:
-    //     case storage::Delta::Action::REMOVE_OUT_EDGE: 
-    //     case storage::Delta::Action::ADD_IN_EDGE:
-    //     case storage::Delta::Action::REMOVE_IN_EDGE:{
-    //       delta_is_edge=true;
-    //       break;
-    //     }
-    //     default:break;
-    //   }
-    // }
-    auto transaction_ts=vertex_deltas->transaction_st;
-    auto transaction_te=vertex_deltas->commit_timestamp!=0?vertex_deltas->commit_timestamp:std::numeric_limits<uint64_t>::max();
-    
-    // if(!is_vertex & delta_is_vertex) continue;//需要边的数据 delta是顶点
-    if(transaction_ts>= transaction_te){//节点刚创建的状态，直接跳过
-      break;
-    }
-
-    if(is_vertex & delta_is_edge) {
-      // tmp_ts=transaction_ts;
-      // tmp_te=transaction_te;
-      vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
-      index_++;
-      continue;
-    }//需要顶点的数据 delta是边
-    
-    // std::cout<<"dead delta:"<<transaction_ts<<" "<<transaction_te<<" "<<tmp_ts<<" "<<tmp_te<<" "<<index_<<"\n";
-    //如果是下一个事务的操作,并且上一个事务通过约束条件的判断，则创建新的点
-    if((transaction_ts!=tmp_ts || transaction_te!=tmp_te) & history_delta::TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types_)){//&TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types)
-      dead_deltas.emplace_back(index_);
-      // std::cout<<"test index here1:"<<index_<<"\n";
-      if(types_=="as of") {//如果是时间点，则直接返回，也不需要遍历delted history的记录
-        need_deleted_flag=false;
-        break;
-      }
-    }
-
-    tmp_ts=transaction_ts;
-    tmp_te=transaction_te;
-
-    // Move to the next delta.
-    vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
-    index_++;
-  }
-
-  //最后一个事务的数据
-  if(need_deleted_flag){
-    if((tmp_ts!=tmp_te) & history_delta::TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types_)){//&TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types)
-      dead_deltas.emplace_back(index_);
-      // std::cout<<"test index here2:"<<index_<<"\n";
-      if(types_=="as of") {//如果是时间点，则直接返回，也不需要遍历delted history的记录
-        need_deleted_flag=false;
-      }
-    }
-  }
-  // std::cout<<"get dead info done\n";
-  return std::make_pair(need_deleted_flag,dead_deltas);
-}
-
-
-//获取kv点或者边的属性
-std::pair<bool,std::pair<std::vector<int>,std::vector<nlohmann::json>>> getHistoryInfo(uint64_t object_gid,std::map<uint64_t,std::vector<nlohmann::json>> &fiter_history_datas_,std::optional<query::VertexAccessor> current_vertex_,std::optional<storage::HistoryEdge*> current_edge_,uint64_t c_ts,uint64_t c_te,std::string types_,bool is_vertex){
-  auto get_history_flag=false;
-  auto [need_deleted_flag,dead_deltas]=getDeadInfo(current_vertex_,current_edge_,c_ts, c_te,types_,is_vertex);
-  auto gid_history_deltas_=std::vector<nlohmann::json>();
-  if(!dead_deltas.empty()) get_history_flag=true;
-  if(need_deleted_flag){
-    if(fiter_history_datas_.find(object_gid)!=fiter_history_datas_.end()){
-      gid_history_deltas_=fiter_history_datas_[object_gid];
-    }
-  }
-  if(!gid_history_deltas_.empty()) get_history_flag=true;
-  return std::make_pair(get_history_flag,std::make_pair(dead_deltas,gid_history_deltas_));
-}
-
 const std::string kDeltaPrefix = "D:";
 const std::string kRecreatePrefix = "R:";
 
@@ -345,225 +213,47 @@ History_delta::History_delta(const std::string &storage_directory,bool realTimeF
   realTimeFlagConstant=realTimeFlag;
 }
 
-/**
- * @brief v2.0 获取所有顶点（删除+未被删除）的信息。首先根据hash_table找到符合时间条件的顶点，随后seek表找到顶点的信息
- * 
- * @param c_ts 条件开始时间
- * @param c_te 条件结束时间
- * @param type 查询的类型：as,from to ,between and 
- * @return std::pair<std::map<int,nlohmann::json>,std::map<int,std::vector<nlohmann::json>>> 被删除的顶点：gid，info；未被删除的顶点
- */
-std::pair<std::map<uint64_t,nlohmann::json>,std::map<uint64_t,std::vector<nlohmann::json>>> History_delta::GetAllVertexDeltas(uint64_t c_ts,uint64_t c_te,std::string type){
-  std::map<uint64_t,std::vector<nlohmann::json>> fiter_anchor_datas_;//可以直接由kv中获取数据 gid,(data_json,anchor_flag)
-  std::map<uint64_t,nlohmann::json> fiter_history_delete;
 
-  for(auto [vertx_gid,value]:vertex_time_table_){
-    auto min_ts=value.first;//顶点的历史最小时间
-    auto max_te=value.second;//顶点的历史最大时间
-    if(!((min_ts>=c_ts&min_ts<=c_te)||(max_te>=c_ts&max_te<=c_te))) continue; //历史数据中没有符合的范围
-    // auto vertx_gid=gids.AsUint();//当前顶点的id
-    std::string c_ts_str=uint_convert_to_string((int64_t)c_ts,realTimeFlagConstant);
 
-    //1、在VA段查找最邻近的record
-    auto anchor_prefix=kVertexAnchorPrefix+std::to_string(vertx_gid)+":"+c_ts_str;
-    auto iter_end=storage_.last(anchor_prefix);//null
-    auto iter_begin=storage_.starts(anchor_prefix);//seek 符合时间条件的最开始的record 比当前时间大一个的指针  
-    std::vector<nlohmann::json> history_Delta;
-    auto tmp_info=nlohmann::json::object(); 
-
-    //1.1. VA中找不到，从最新的VD找到数据
-    auto prefixs=kVertexDeltaPrefix+std::to_string(vertx_gid);
-    auto vd_iter_end=storage_.end(prefixs);//null
-    auto vd_iter_begin=storage_.begin(prefixs);
-    bool need_combine=true;
-    if(iter_begin!=iter_end){//1.2. VA中找到了，筛选VD数据段
-      auto key=iter_begin->first;
-      tmp_info=nlohmann::json::parse(iter_begin->second);
-      if(tmp_info.find("R")!=tmp_info.end())fiter_history_delete[vertx_gid]=tmp_info;
-      //VD段数据查找 第一个record 是anchor随后都是delta
-      auto va_ts=std::get<1>(string_convert_to_uint(key,realTimeFlagConstant));
-      auto va_ts_str=uint_convert_to_string((int64_t)-va_ts,realTimeFlagConstant);
-      auto delta_prefix=kVertexDeltaPrefix+std::to_string(vertx_gid)+":"+va_ts_str;
-      vd_iter_end=storage_.last(delta_prefix);//null
-      vd_iter_begin=storage_.starts(delta_prefix);
-    }
-    //2、获取数据
-    for(;vd_iter_begin!=vd_iter_end;++vd_iter_begin){
-      auto [gid,ts,te]=string_convert_to_uint(vd_iter_begin->first,realTimeFlagConstant);
-      auto object_ts=(uint64_t)-ts;//版本的开始时间
-      auto object_te=(uint64_t)-te;//版本的结束时间
-      if(object_te<=c_ts) break;
-      auto current_info=nlohmann::json::parse(vd_iter_begin->second);//当前节点的数据
-      if(current_info.find("R")!=current_info.end())fiter_history_delete[gid]=current_info;
-      if(need_combine){
-        combineVertex(tmp_info,current_info);
-        tmp_info=current_info;
-      }
-      if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
-        need_combine=false;
-        history_Delta.emplace_back(current_info);
-        if(type=="as of") break;
-      }
-    }
-    fiter_anchor_datas_[vertx_gid]=history_Delta;
-  }
-  
-  return std::make_pair(fiter_history_delete,fiter_anchor_datas_);
-}
-
-/**
- * @brief v3.0获取指定顶点的信息
- * 
- * @param gid 顶点的id
- * @param c_ts 
- * @param c_te 
- * @param type 
- * @return std::pair<std::vector<nlohmann::json>,bool> 历史数据，是否可以从kv中直接得到数据
- */
-std::pair<std::vector<nlohmann::json>,bool> History_delta::GetVertexInfo(storage::Gid gid,uint64_t c_ts,uint64_t c_te,std::string type){
-  std::cout<<"get delete info here\n";
-  std::vector<nlohmann::json> history_Delta;
-  //simple imple
-  bool anchor_flag=false;
-  // auto return_info=nlohmann::json::parse("info");
-  // history_Delta.emplace_back(return_info);
-  // return std::make_pair(history_Delta,anchor_flag);
-  //simple imple
-  auto vertx_gid=gid.AsUint();//当前顶点的id
-  auto tmp_info=nlohmann::json::object(); 
-  // auto current_info=nlohmann::json::object(); 
-  //1、在VA段查找最邻近的record
-  auto anchor_prefix=kVertexAnchorPrefix+std::to_string(vertx_gid)+":"+uint_convert_to_string((int64_t)c_te,realTimeFlagConstant);
-  // auto anchor_prefix=kVertexAnchorPrefix+std::to_string(vertx_gid)+":";
-  std::cout<<"v anchor_prefix:"<<c_te<<" "<<anchor_prefix<<"\n";
-  auto iter_begin=storage_.starts(anchor_prefix);//seek 符合时间条件的最开始的record 比当前时间大一个的指针  
-  auto iter_end=storage_.last(anchor_prefix);//null
-
-  //1.1. VA中找不到，从最新的VD找到数据
-  auto prefixs=kVertexDeltaPrefix+std::to_string(vertx_gid)+":"+uint_convert_to_string((int64_t)-c_te,realTimeFlagConstant);
-  auto vd_iter_begin=storage_.starts(prefixs);
-  auto vd_iter_end=storage_.last(prefixs);//null
-  bool need_combine=true;
-  // wzy edit 0510 if->while
-  if(iter_begin!=iter_end){//1.2. VA中找到了，筛选VD数据段
-    auto key=iter_begin->first;
-    auto parts = splits(key, ":");
-    if(parts[1] != std::to_string(vertx_gid)){
-      anchor_flag=false;
-    }else{
-      anchor_flag=true;
-      auto va_ts=(int64_t)(std::get<1>(string_convert_to_uint(key,realTimeFlagConstant)));
-      std::cout<<"get anchor key here:"<<va_ts<<" "<<c_te<<"\n";
-      if(va_ts>=c_te){
-        // hjm info 
-        tmp_info=nlohmann::json::parse(iter_begin->second);
-         // hjm info 
-        // std::cout<<"get va here2:"<<va_ts<<"\n";
-        va_ts=va_ts>0?-va_ts:va_ts;
-        auto va_ts_str=uint_convert_to_string(va_ts,realTimeFlagConstant);
-        auto delta_prefix=kVertexDeltaPrefix+std::to_string(vertx_gid)+":"+va_ts_str;
-        std::cout<<"set delta_prefix:"<<va_ts<<" "<<delta_prefix<<"\n";
-        vd_iter_begin=storage_.starts(delta_prefix);
-        vd_iter_end=storage_.last(delta_prefix);//null
-      }
-    }
-  }
-
-  //2、获取delta数据
-  for(;vd_iter_begin!=vd_iter_end;++vd_iter_begin){
-    auto [gid,ts,te]=string_convert_to_uint(vd_iter_begin->first,realTimeFlagConstant);
-    auto object_ts=(uint64_t)-ts;//版本的开始时间
-    auto object_te=(uint64_t)-te;//版本的结束时间
-    std::cout<<"delta $$$$$$$$$$$$$$$test:"<<gid<<" "<<object_ts<<" "<<object_te<<" "<<c_ts<<" "<<c_te<<"\n";
-    if(gid!=vertx_gid) break;
-    if(object_te<c_ts) break;
-    auto current_info=nlohmann::json::parse(vd_iter_begin->second);//当前节点的数据
-    if(need_combine){
-      combineVertex(tmp_info,current_info);
-      tmp_info=current_info;
-    }
-    if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
-      need_combine=false;
-      std::cout<<"get vertex delta info:"<<object_ts<<" "<<object_te<<"\n";
-      history_Delta.emplace_back(current_info);
-      if(type=="as of") break;
-    }
-  } 
-  return std::make_pair(history_Delta,anchor_flag);
-}
-
-/**
- * @brief v3.0 获取制定边的信息
- * 
- * @param c_ts 
- * @param c_te 
- * @param type 
- * @param gid 
- * @return std::pair<std::vector<nlohmann::json>,bool> 历史数据，是否可以从kv中直接得到数据
- */
 std::pair<std::vector<nlohmann::json>,bool> History_delta::GetEdgeInfo(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t gid){
   std::vector<nlohmann::json> history_Delta;
   bool anchor_flag=false;
-  uint64_t gid_tmp=1595;
-  // if(edge_time_table_.find(gid)==edge_time_table_.end()) return std::make_pair(history_Delta,anchor_flag); 
-  // auto &[min_ts,max_te]=edge_time_table_[gid];
-  // if(!TemporalCheck(min_ts,max_te,c_ts,c_te,type)) return std::make_pair(history_Delta,anchor_flag); //历史数据中没有符合的范围
-  
-  auto tmp_info=nlohmann::json::object(); 
+  auto tmp_info=nlohmann::json::object();
   //1、在VA段查找最邻近的record
   auto anchor_prefix=kEdgeAnchorPrefix+std::to_string(gid)+":"+uint_convert_to_string((int64_t)c_te,realTimeFlagConstant);
-  std::cout<<"e anchor_prefix:"<<c_te<<" "<<anchor_prefix<<"\n";
   auto iter_begin=storage_.starts(anchor_prefix);
   auto iter_end=storage_.last(anchor_prefix);
 
-  //1.1. VA中找不到，从最新的VD找到数据
   auto prefixs=kEdgeDeltaPrefix+std::to_string(gid);
-  // if(gid==gid_tmp)std::cout<<"get ed here:"<<prefixs<<"\n";
   auto vd_iter_begin=storage_.starts(prefixs);
   auto vd_iter_end=storage_.last(prefixs);//null
   bool need_combine=true;
 
   while(iter_begin!=iter_end){//1.2. VA中找到了，筛选VD数据段
     auto key=iter_begin->first;
-    // wzy begin
     auto parts = splits(key, ":");
-    // auto va_ts=(int64_t)(std::get<1>(string_convert_to_uint(key)));
-    // std::cout<<parts[1]<<" "<<va_ts<<std::endl;
     if(parts[1] != std::to_string(gid)){
       ++iter_begin;
       break;
     }
     anchor_flag=true;
     tmp_info=nlohmann::json::parse(iter_begin->second);
-    // std::cout<<"VA here! "<<tmp_info.dump()<<std::endl;
-    //VD段数据查找 第一个record 是anchor随后都是delta
     auto va_ts=(int64_t)(std::get<1>(string_convert_to_uint(key,realTimeFlagConstant)));
-    // va_ts=va_ts>0?-va_ts:va_ts;
-    // if(gid==gid_tmp)std::cout<<"get va here"<<va_ts<<"\n";
-    // auto va_ts_str=uint_convert_to_string(va_ts);
-    // auto delta_prefix=kEdgeDeltaPrefix+std::to_string(gid)+":"+va_ts_str;
-    // vd_iter_begin=storage_.starts(delta_prefix);
-    // vd_iter_end=storage_.last(delta_prefix);//null
-    //double check
     if(va_ts>=c_te){
-      // if(gid==gid_tmp)std::cout<<"get va here2"<<va_ts<<"\n";
       va_ts=va_ts>0?-va_ts:va_ts;
       auto va_ts_str=uint_convert_to_string(va_ts,realTimeFlagConstant);
       auto delta_prefix=kEdgeDeltaPrefix+std::to_string(gid)+":"+va_ts_str;
-      std::cout<<"e delta_prefix:"<<va_ts<<" "<<delta_prefix<<"\n";
       vd_iter_begin=storage_.starts(delta_prefix);
-      vd_iter_end=storage_.last(delta_prefix);//null
-      break; //wzy edit 0510
+      vd_iter_end=storage_.last(delta_prefix);
+      break;
     }else  anchor_flag=false;
-    ++iter_begin; //wzy edit 0510
+    ++iter_begin;
   }
-  //2、获取数据
-  // std::cout<<"get here:"<<gid<<"\n";
+
   for(;vd_iter_begin!=vd_iter_end;++vd_iter_begin){
     auto [egde_gid,ts,te]=string_convert_to_uint(vd_iter_begin->first,realTimeFlagConstant);
     auto object_ts=(uint64_t)-ts;//版本的开始时间
     auto object_te=(uint64_t)-te;//版本的结束时间
-    // if(gid==gid_tmp)std::cout<<"get here2:"<<object_ts<<" "<<object_te<<"\n";
     if(gid!=egde_gid) break;
     if(object_te<c_ts) break;
     auto current_info=nlohmann::json::parse(vd_iter_begin->second);//当前节点的数据
@@ -574,59 +264,19 @@ std::pair<std::vector<nlohmann::json>,bool> History_delta::GetEdgeInfo(uint64_t 
     if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
       need_combine=false;
       history_Delta.emplace_back(current_info);
-      // std::cout<<"get edge info:"<<object_ts<<" "<<object_te<<"\n";
       if(type=="as of") break;
     }
   } 
   return std::make_pair(history_Delta,anchor_flag);
 }
 
-std::vector<nlohmann::json> History_delta::GetDeleteEdgeInfo(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t vertex_gid){
-  std::vector<nlohmann::json> history_Delta;
-  bool anchor_flag=false;
-  //1. VD找到数据
-  auto prefixs=kVertexEdgePrefix+std::to_string(vertex_gid);
-  auto vd_iter_begin=storage_.starts(prefixs);
-  auto vd_iter_end=storage_.last(prefixs);//null
-  bool need_combine=true;
-  auto tmp_info=nlohmann::json::object(); 
 
-  //2、获取数据
-  for(;vd_iter_begin!=vd_iter_end;++vd_iter_begin){
-    auto [gid,ts,te]=string_convert_to_uint(vd_iter_begin->first,realTimeFlagConstant);
-    auto object_ts=(uint64_t)-ts;//版本的开始时间
-    auto object_te=(uint64_t)-te;//版本的结束时间
-    // if(gid==gid_tmp)std::cout<<"get here2:"<<object_ts<<" "<<object_te<<"\n";
-    if(gid!=vertex_gid) break;
-    if(object_te<c_ts) break;
-    auto current_info=nlohmann::json::parse(vd_iter_begin->second);//当前节点的数据
-    if(need_combine){
-      combineEdge(tmp_info,current_info);
-      tmp_info=current_info;
-    }
-    if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
-      need_combine=false;
-      history_Delta.emplace_back(current_info);
-      if(type=="as of") break;
-    }
-  } 
-
-  return history_Delta;//std::make_pair(history_Delta,anchor_flag);
-}
-
-/**
- * @brief v3.0 获取time table index
- * 
- */
 void History_delta::GetTimeTableAll(){
-  bool success = false;
-  //save vertex time table
   for(auto it=storage_.starts(kVertexTimePrefix);it!=storage_.last(kVertexTimePrefix);++it){
     auto gid=(uint64_t)std::stoi(it->first.substr(3));
     auto split_info=splits(it->second,":");
     auto min_ts=(uint64_t)std::stoi(split_info[0]);
     auto max_te=(uint64_t)std::stoi(split_info[1]);
-    // std::cout<<"historydelra::598 "<<gid<<" "<<min_ts<<" "<<max_te<<"\n";
     vertex_time_table_[gid]=std::make_pair(min_ts,max_te);
   }
   //save edge time table
@@ -635,141 +285,66 @@ void History_delta::GetTimeTableAll(){
     auto split_info=splits(it->second,":");
     auto min_ts=(uint64_t)std::stoi(split_info[0]);
     auto max_te=(uint64_t)std::stoi(split_info[1]);
-    // std::cout<<"historydelra::607 "<<gid<<" "<<min_ts<<" "<<max_te<<"\n";
     edge_time_table_[gid]=std::make_pair(min_ts,max_te);
   }
 }
 
-/**
- * @brief v2.0 获取指定边（未被删除）id的信息，seek到边的位置，然后遍历获取数据
- * 
- * @param c_ts 条件开始时间
- * @param c_te 条件结束时间
- * @param type 查询的类型：as,from to ,between and 
- * @param gid 边的gid
- * @return std::map<int,std::vector<nlohmann::json>> 边
- */
-std::map<uint64_t,std::vector<nlohmann::json>> History_delta::GetEdgeDelta(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t gid){
-  std::map<uint64_t,std::vector<nlohmann::json>> fiter_history_datas_;
-  std::vector<nlohmann::json> history_Delta;
-  auto tmp_info=nlohmann::json::object();
-  auto next_flag=false;
-  auto prefix="ED:"+std::to_string(gid);
-  // std::cout<<"prefix:"<<prefix<<"\n";
-  auto &[min_ts,max_te]=edge_time_table_[gid];
-  // std::cout<<prefix<<" min_ts:"<<min_ts<<" max_te:"<<max_te<<"\n";
-  if(!TemporalCheck(min_ts,max_te,c_ts,c_te,type)) return fiter_history_datas_;
-  // std::cout<<"here2   "<<prefix<<" min_ts:"<<min_ts<<" max_te:"<<max_te<<"\n";
-  for (auto it=storage_.begin(prefix); it!=storage_.end(prefix); ++it){
-    auto [gid,ts,te]=string_convert_to_uint(it->first,realTimeFlagConstant);
-    auto object_ts=(uint64_t)-ts;//版本的开始时间
-    auto object_te=(uint64_t)-te;//版本的结束时间
-    // std::cout<<"history_delta::589 "<<gid<<" "<<object_ts<<" "<<object_te<<"\n";
-    if(object_te<=c_ts) break;
-    auto existing_vertex = it->second;
-    auto curren_info=nlohmann::json::parse(existing_vertex);//当前节点的数据
-    combineVertex(tmp_info,curren_info);
-    tmp_info=curren_info;
-    if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
-      history_Delta.emplace_back(curren_info);
-      if(type=="as of") break;
+std::pair<std::vector<nlohmann::json>,bool> History_delta::GetVertexInfo(storage::Gid gid,uint64_t c_ts,uint64_t c_te,std::string type){
+    std::vector<nlohmann::json> history_Delta;
+    bool anchor_flag=false;
+    auto vertx_gid=gid.AsUint();//当前顶点的id
+    auto tmp_info=nlohmann::json::object();
+    auto anchor_prefix=kVertexAnchorPrefix+std::to_string(vertx_gid)+":"+uint_convert_to_string((int64_t)c_te,realTimeFlagConstant);
+    auto iter_begin=storage_.starts(anchor_prefix);//seek 符合时间条件的最开始的record 比当前时间大一个的指针
+    auto iter_end=storage_.last(anchor_prefix);//null
+
+    //1.1. VA中找不到，从最新的VD找到数据
+    auto prefixs=kVertexDeltaPrefix+std::to_string(vertx_gid)+":"+uint_convert_to_string((int64_t)-c_te,realTimeFlagConstant);
+    auto vd_iter_begin=storage_.starts(prefixs);
+    auto vd_iter_end=storage_.last(prefixs);//null
+    bool need_combine=true;
+    if(iter_begin!=iter_end){//1.2. VA中找到了，筛选VD数据段
+        auto key=iter_begin->first;
+        auto parts = splits(key, ":");
+        if(parts[1] != std::to_string(vertx_gid)){
+            anchor_flag=false;
+        }else{
+            anchor_flag=true;
+            auto va_ts=(int64_t)(std::get<1>(string_convert_to_uint(key,realTimeFlagConstant)));
+            if(va_ts>=c_te){
+                tmp_info=nlohmann::json::parse(iter_begin->second);
+                va_ts=va_ts>0?-va_ts:va_ts;
+                auto va_ts_str=uint_convert_to_string(va_ts,realTimeFlagConstant);
+                auto delta_prefix=kVertexDeltaPrefix+std::to_string(vertx_gid)+":"+va_ts_str;
+                vd_iter_begin=storage_.starts(delta_prefix);
+                vd_iter_end=storage_.last(delta_prefix);//null
+            }
+        }
     }
-  }
-  fiter_history_datas_[gid]=history_Delta;
-  return fiter_history_datas_;
+
+    //2、获取delta数据
+    for(;vd_iter_begin!=vd_iter_end;++vd_iter_begin){
+        auto [gid,ts,te]=string_convert_to_uint(vd_iter_begin->first,realTimeFlagConstant);
+        auto object_ts=(uint64_t)-ts;//版本的开始时间
+        auto object_te=(uint64_t)-te;//版本的结束时间
+        if(gid!=vertx_gid) break;
+        if(object_te<c_ts) break;
+        auto current_info=nlohmann::json::parse(vd_iter_begin->second);//当前节点的数据
+        if(need_combine){
+            combineVertex(tmp_info,current_info);
+            tmp_info=current_info;
+        }
+        if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
+            need_combine=false;
+            history_Delta.emplace_back(current_info);
+            if(type=="as of") break;
+        }
+    }
+    return std::make_pair(history_Delta,anchor_flag);
 }
 
-/**
- * @brief v2.0 获取制定顶点（被删除）的边
- * 
- * @param c_ts 条件开始时间
- * @param c_te 条件结束时间
- * @param type 查询的类型：as,from to ,between and 
- * @param v_gid 边的id
- * @return std::map<int,std::vector<nlohmann::json>> 被删除的边
- */
-std::map<uint64_t,std::vector<nlohmann::json>> History_delta::GetDeleteEdgeDeltas(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t gid){
-  std::map<uint64_t,std::vector<nlohmann::json>> fiter_history_datas_;
-  std::vector<nlohmann::json> history_Delta;
-  auto tmp_info=nlohmann::json::object();
-  auto next_flag=false;
-  auto prefix="VE:"+std::to_string(gid);
-  // std::cout<<"prefix:"<<prefix<<"\n";
-  for (auto it=storage_.begin(prefix); it!=storage_.end(prefix); ++it){
-    auto [gid,ts,te]=string_convert_to_uint(it->first,realTimeFlagConstant);
-    auto object_ts=(uint64_t)-ts;//版本的开始时间
-    auto object_te=(uint64_t)-te;//版本的结束时间
-    // std::cout<<"history_delta::589 "<<gid<<" "<<object_ts<<" "<<object_te<<"\n";
-    if(object_te<=c_ts) break;
-    auto existing_vertex = it->second;
-    auto curren_info=nlohmann::json::parse(existing_vertex);//当前节点的数据
-    combineEdge(tmp_info,curren_info);
-    tmp_info=curren_info;
-    if((object_ts>=c_ts&object_ts<=c_te)||(object_te>=c_ts&object_te<=c_te)){
-      // std::cout<<"history_delta::669 "<<gid<<" "<<object_ts<<" "<<object_te<<"\n";
-      history_Delta.emplace_back(curren_info);
-      if(type=="as of") break;
-    }
-    // if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
-    //   history_Delta.emplace_back(curren_info);
-    //   if(type=="as of") break;
-    // }
-  }
-  fiter_history_datas_[gid]=history_Delta;
-  return fiter_history_datas_;
-}
-
-
-
-std::pair<bool,std::vector<int>> History_delta::getDeadInfo(storage::Delta* vertex_deltas,uint64_t c_ts,uint64_t c_te,std::string types_,bool is_vertex){
-  //dead info 属性 label和边 不需要考虑
-  std::cout<<"get dead info\n";
-  std::map<storage::PropertyId, storage::PropertyValue> dead_properties;
-  auto dead_deltas=std::vector<int>();//记住delta的下标
-  auto tmp_ts=0;
-  auto tmp_te=0;
-  int index_=0;
-  auto need_deleted_flag=true;
-  bool delta_is_edge=false;
-  while (vertex_deltas != nullptr) {
-    delta_is_edge=false;
-    switch (vertex_deltas->action) {
-      case storage::Delta::Action::ADD_OUT_EDGE:
-      case storage::Delta::Action::REMOVE_OUT_EDGE: 
-      case storage::Delta::Action::ADD_IN_EDGE:
-      case storage::Delta::Action::REMOVE_IN_EDGE:{
-        delta_is_edge=true;
-        break;
-      }
-      default:break;
-    }
-    auto transaction_ts=vertex_deltas->transaction_st;
-    auto transaction_te=vertex_deltas->commit_timestamp!=0?vertex_deltas->commit_timestamp:std::numeric_limits<uint64_t>::max();
-    // std::cout<<"get dead info here2:"<<transaction_ts<<" "<<transaction_te<<"\n";
-    if(transaction_ts>= transaction_te){//节点刚创建的状态，直接跳过
-      vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
-      index_++;
-      continue;
-    }
-    //跳过未提交的节点
-    if(is_vertex & delta_is_edge & transaction_te!=std::numeric_limits<uint64_t>::max()) {
-      vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
-      index_++;
-      continue;
-    }//需要顶点的数据 delta是边
-
-    //just for test 
-    std::cout<<"get indeed delta here:"<<transaction_ts<<" "<<transaction_te<<"\n";
-    dead_deltas.emplace_back(index_);
-    need_deleted_flag=false;
-    break;
-  }
-  return std::make_pair(need_deleted_flag,dead_deltas);
-}
 
 std::pair<std::vector< std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> >,bool> getDeadInfo2(query::VertexAccessor current_vertex_,uint64_t c_ts,uint64_t c_te,std::string types_){
-  //dead info 属性 label和边 不需要考虑
-  std::cout<<"get dead info\n";
   std::vector<std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t>> res;
   auto vertex_deltas=current_vertex_.getDeltas();
   auto need_deleted_flag=true;
@@ -810,7 +385,6 @@ std::pair<std::vector< std::tuple< std::map<storage::PropertyId,storage::Propert
     }//需要顶点的数据 delta是边
 
     if(history_delta::TemporalCheck(transaction_ts,transaction_te,c_ts,c_te,types_)){//&TemporalCheck(tmp_ts,tmp_te,c_ts,c_te,types)
-      std::cout<<"get indeed delta here:"<<transaction_ts<<" "<<transaction_te<<"\n";
       res.emplace_back(std::make_tuple(maybe_properties,transaction_ts,transaction_te));
       if(types_=="as of") {//如果是时间点，则直接返回，也不需要遍历delted history的记录
         need_deleted_flag=false;
@@ -820,14 +394,41 @@ std::pair<std::vector< std::tuple< std::map<storage::PropertyId,storage::Propert
     // Move to the next delta.
     vertex_deltas = vertex_deltas->next.load(std::memory_order_acquire);    
   }
-
   return std::make_pair(res,need_deleted_flag);
 }
 
-/**
- * @brief v3.0删除的顶点另外存储成anchor信息
- * 
- */
+std::vector<nlohmann::json> History_delta::GetDeleteEdgeInfo(uint64_t c_ts,uint64_t c_te,std::string type,uint64_t vertex_gid){
+    std::vector<nlohmann::json> history_Delta;
+    bool anchor_flag=false;
+    //1. VD找到数据
+    auto prefixs=kVertexEdgePrefix+std::to_string(vertex_gid);
+    auto vd_iter_begin=storage_.starts(prefixs);
+    auto vd_iter_end=storage_.last(prefixs);//null
+    bool need_combine=true;
+    auto tmp_info=nlohmann::json::object();
+
+    //2、获取数据
+    for(;vd_iter_begin!=vd_iter_end;++vd_iter_begin){
+        auto [gid,ts,te]=string_convert_to_uint(vd_iter_begin->first,realTimeFlagConstant);
+        auto object_ts=(uint64_t)-ts;//版本的开始时间
+        auto object_te=(uint64_t)-te;//版本的结束时间
+        if(gid!=vertex_gid) break;
+        if(object_te<c_ts) break;
+        auto current_info=nlohmann::json::parse(vd_iter_begin->second);//当前节点的数据
+        if(need_combine){
+            combineEdge(tmp_info,current_info);
+            tmp_info=current_info;
+        }
+        if(TemporalCheck(object_ts,object_te,c_ts,c_te,type)){
+            need_combine=false;
+            history_Delta.emplace_back(current_info);
+            if(type=="as of") break;
+        }
+    }
+
+    return history_Delta;
+}
+
 void History_delta::SaveDeltaAll() {
   bool success = false;
   if(gid_delta_.empty()) return;
@@ -939,18 +540,6 @@ void History_delta::SaveDelta(storage::Gid gid,const std::optional<storage::Gid>
 
   std::string start_str=uint_convert_to_string((int64_t)-start,realTimeFlagConstant);
   std::string commit_str=uint_convert_to_string((int64_t)-commit,realTimeFlagConstant);
-  // auto put_key=std::make_tuple(prefix,(gid.AsUint()),commit);
-  // auto iter =  gid_delta_delta_.find(put_key);
-  // if(iter !=  gid_delta_delta_.end()){ 
-  //   auto before_value= gid_delta_delta_[put_key];
-  //   if(edge_flag){//VE
-  //     combineEdge(before_value,data);
-  //   }else{//ED+VD
-  //     combineVertex(before_value,data);
-  //   }
-  // }
-  // gid_delta_delta_[put_key]=data;
-  // std::cout<<"save before:"<<
   auto put_key=prefix + std::to_string(gid.AsUint()) +":"+(start_str)+":"+(commit_str); //std::to_string  std::to_string
   // union something
   data["TT_TS"]=start;
@@ -959,19 +548,12 @@ void History_delta::SaveDelta(storage::Gid gid,const std::optional<storage::Gid>
   if(iter !=  gid_delta_.end()){ 
     auto before_value= gid_delta_[put_key];
     if(edge_flag){//VE
-      // std::cout<<"combine edge here\n";
       combineEdge(before_value,data);
     }else{//ED+VD
-      // std::cout<<"combine vertex here\n";
       combineVertex(before_value,data);
     }
   }
    gid_delta_[put_key]=data;
-  //  if(gid.AsUint()==3514)std::cout<<"save delta:"<<start_str<<" "<<commit_str<<" "<<put_key<<"\n";
-
-  //save realtional transaction's time_table to tmp; store to the kv storage 
-  // vertex_time_tmp_[vertex_gid]=vertex_time_table_[vertex_gid];
-  // edge_time_tmp_[vertex_gid]=edge_time_table_[vertex_gid];
 }
 
 std::string History_delta::getPrefix(storage::Gid gid,const uint64_t start,bool vertex){

@@ -132,38 +132,3 @@ if (lower_build_type STREQUAL "release")
 endif()
 
 install(TARGETS mg_import_csv RUNTIME DESTINATION bin)
-
-# ----------------------------------------------------------------------------
-# Memgraph CSV Import Tool Executable
-# ----------------------------------------------------------------------------
-
-# 
-# pokec test!
-# 
-add_executable(mg_test_pokec mg_test_pokec.cpp)
-target_link_libraries(mg_test_pokec mg-storage-v2)
-
-# Strip the executable in release build.
-if (lower_build_type STREQUAL "release")
-  add_custom_command(TARGET mg_test_pokec POST_BUILD
-                     COMMAND strip -s mg_test_pokec
-                     COMMENT "mg_test_pokec")
-endif()
-
-install(TARGETS mg_test_pokec RUNTIME DESTINATION bin)
-
-
-# 
-# operation test!
-# 
-add_executable(mg_test_op mg_test_op.cpp)
-target_link_libraries(mg_test_op mg-storage-v2)
-
-# Strip the executable in release build.
-if (lower_build_type STREQUAL "release")
-  add_custom_command(TARGET mg_test_op POST_BUILD
-                     COMMAND strip -s mg_test_op
-                     COMMENT "mg test op")
-endif()
-
-install(TARGETS mg_test_op RUNTIME DESTINATION bin)
