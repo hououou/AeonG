@@ -52,49 +52,35 @@ def _get_usage(pid):
 
 
 class Memgraph:
-    def __init__(self, memgraph_binary, temporary_dir, properties_on_edges,memgraph_port,memory_limit,anchor_num,snapshot_interval_sec=60,real_time_flag=False,graph_operations=10000,storage_gc_cycle_sec=30,storage_snapshot_on_exit="true",query_modules_directory="",retention_on_startup=False,retention_interval_sec=60,retention_period_sec=15):
+    def __init__(self, memgraph_binary, temporary_dir, properties_on_edges, memgraph_port, memory_limit, anchor_num,
+                 snapshot_interval_sec=60, real_time_flag=False, graph_operations=10000, storage_gc_cycle_sec=30,
+                 storage_snapshot_on_exit="true", query_modules_directory="", retention_on_startup=False,
+                 retention_interval_sec=60, retention_period_sec=15):
         self._memgraph_binary = memgraph_binary
-        self._directory = temporary_dir #tempfile.TemporaryDirectory(dir=temporary_dir)
+        self._directory = temporary_dir
         self._properties_on_edges = properties_on_edges
         self._proc_mg = None
-        self._port=memgraph_port
-        self._snapshot_interval_sec=snapshot_interval_sec
-        self._query_modules_directory=query_modules_directory
-        self._memory_limit=memory_limit
-        self._anchor_num=anchor_num
-        self._graph_operations=graph_operations
-        self._storage_snapshot_on_exit=storage_snapshot_on_exit
-        self._storage_gc_cycle_sec=storage_gc_cycle_sec
-        self._real_time_flag=real_time_flag
-        self._retention_on_startup=retention_on_startup
-        self._retention_interval_sec=retention_interval_sec #默认每60秒check一次是否删除
-        self._retention_period_sec=retention_period_sec
+        self._port = memgraph_port
+        self._snapshot_interval_sec = snapshot_interval_sec
+        self._query_modules_directory = query_modules_directory
+        self._memory_limit = memory_limit
+        self._anchor_num = anchor_num
+        self._graph_operations = graph_operations
+        self._storage_snapshot_on_exit = storage_snapshot_on_exit
+        self._storage_gc_cycle_sec = storage_gc_cycle_sec
+        self._real_time_flag = real_time_flag
+        self._retention_on_startup = retention_on_startup
+        self._retention_interval_sec = retention_interval_sec  # 默认每60秒check一次是否删除
+        self._retention_period_sec = retention_period_sec
 
         atexit.register(self._cleanup)
 
-        # database args
-        # database_args = [memgraph_binary,
-        #                  "--bolt-num-workers", self.num_workers,
-        #                  "--data-directory", os.path.join(self.dataset,
-        #                                                   "memgraph"),
-        #                  "--storage-recover-on-startup", "true",
-        #                  "--bolt-port", self.port]
-        # ret = subprocess.run([memgraph_binary, "--version"],
-        #                      stdout=subprocess.PIPE, check=True)
-
-        # Determine Memgraph version
-        ret = subprocess.run([memgraph_binary, "--version"],
-                             stdout=subprocess.PIPE, check=True)
-        version = "0.50.0"#re.search(r"[0-9]+\.[0-9]+\.[0-9]+",
-                            # ret.stdout.decode("utf-8")).group(0)
-        self._memgraph_version = (0, 50, 0)#tuple(map(int, version.split(".")))
-
-    # def __del__(self):
-    #     self._cleanup()
-    #     atexit.unregister(self._cleanup)
+        if retention_interval_sec != 0:
+            self._retention_on_startup = True
+        self._memgraph_version = (0, 50, 0)
 
     def _get_args(self, **kwargs):
-        data_directory = os.path.join(self._directory, "memgraph")#self._directory.name
+        data_directory = os.path.join(self._directory, "memgraph")  # self._directory.name
         if self._memgraph_version >= (0, 50, 0):
             kwargs["data_directory"] = data_directory
             # kwargs["port"] =7688 wzy edit
@@ -112,7 +98,7 @@ class Memgraph:
             raise Exception("The database process is already running!")
         args = self._get_args(**kwargs)
         # print("_start",args)
-        self._proc_mg = subprocess.Popen(args, stdout=subprocess.DEVNULL)#subprocess.PIPE subprocess.DEVNULL
+        self._proc_mg = subprocess.Popen(args, stdout=subprocess.DEVNULL)  # subprocess.PIPE subprocess.DEVNULL
         time.sleep(0.2)
         if self._proc_mg.poll() is not None:
             self._proc_mg = None
@@ -120,7 +106,7 @@ class Memgraph:
         wait_for_server(self._port)
         ret = self._proc_mg.poll()
         assert ret is None, "The database process died prematurely " \
-            "({})!".format(ret)
+                            "({})!".format(ret)
 
     def _cleanup(self):
         if self._proc_mg is None:
@@ -133,28 +119,38 @@ class Memgraph:
 
     def start_preparation(self):
         if self._memgraph_version >= (0, 50, 0):
-            self._start(storage_snapshot_on_exit=True,bolt_port=self._port)
+            self._start(storage_snapshot_on_exit=True, bolt_port=self._port)
         else:
             self._start(snapshot_on_exit=True)
 
     def start_benchmark(self):
         # TODO: support custom benchmarking config files!
         if self._memgraph_version >= (0, 50, 0):
-            if(self._query_modules_directory!=""):
-                self._start(storage_recover_on_startup=True,bolt_port=self._port,storage_properties_on_edges="true",query_modules_directory=self._query_modules_directory,memory_limit=self._memory_limit,anchor_num=self._anchor_num,storage_gc_cycle_sec=self._storage_gc_cycle_sec,real_time_flag=self._real_time_flag)
+            if self._query_modules_directory != "":
+                self._start(storage_recover_on_startup=True, bolt_port=self._port, storage_properties_on_edges="true",
+                            query_modules_directory=self._query_modules_directory, memory_limit=self._memory_limit,
+                            anchor_num=self._anchor_num, storage_gc_cycle_sec=self._storage_gc_cycle_sec,
+                            real_time_flag=self._real_time_flag)
             else:
-                self._start(storage_recover_on_startup=True,bolt_port=self._port,storage_properties_on_edges="true",memory_limit=self._memory_limit,anchor_num=self._anchor_num,storage_gc_cycle_sec=self._storage_gc_cycle_sec,real_time_flag=self._real_time_flag) #memory_limit=self._memory_limit
+                self._start(storage_recover_on_startup=True, bolt_port=self._port, storage_properties_on_edges="true",
+                            memory_limit=self._memory_limit, anchor_num=self._anchor_num,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec,
+                            real_time_flag=self._real_time_flag)  # memory_limit=self._memory_limit
 
         else:
             self._start(db_recover_on_startup=True)
-    
+
     def start_clockg_benchmark(self):
         # TODO: support custom benchmarking config files!
         if self._memgraph_version >= (0, 50, 0):
-            if(self._query_modules_directory!=""):
-                self._start(storage_recover_on_startup=True,bolt_port=self._port,storage_properties_on_edges="true",query_modules_directory=self._query_modules_directory,memory_limit=self._memory_limit,storage_snapshot_on_exit=False,storage_gc_cycle_sec=self._storage_gc_cycle_sec)
+            if self._query_modules_directory != "":
+                self._start(storage_recover_on_startup=True, bolt_port=self._port, storage_properties_on_edges="true",
+                            query_modules_directory=self._query_modules_directory, memory_limit=self._memory_limit,
+                            storage_snapshot_on_exit=False, storage_gc_cycle_sec=self._storage_gc_cycle_sec)
             else:
-                self._start(storage_recover_on_startup=True,bolt_port=self._port,storage_properties_on_edges="true",memory_limit=self._memory_limit,storage_snapshot_on_exit=False,storage_gc_cycle_sec=self._storage_gc_cycle_sec) #memory_limit=self._memory_limit
+                self._start(storage_recover_on_startup=True, bolt_port=self._port, storage_properties_on_edges="true",
+                            memory_limit=self._memory_limit, storage_snapshot_on_exit=False,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec)  # memory_limit=self._memory_limit
 
         else:
             self._start(db_recover_on_startup=True)
@@ -162,69 +158,110 @@ class Memgraph:
     def start_tgql_benchmark(self):
         # TODO: support custom benchmarking config files!
         if self._memgraph_version >= (0, 50, 0):
-            if(self._query_modules_directory!=""):
-                self._start(storage_recover_on_startup=True,bolt_port=self._port,storage_properties_on_edges="true",query_modules_directory=self._query_modules_directory,memory_limit=self._memory_limit,storage_gc_cycle_sec=self._storage_gc_cycle_sec)
+            if self._query_modules_directory != "":
+                self._start(storage_recover_on_startup=True, bolt_port=self._port, storage_properties_on_edges="true",
+                            query_modules_directory=self._query_modules_directory, memory_limit=self._memory_limit,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec)
             else:
-                self._start(storage_recover_on_startup=True,bolt_port=self._port,storage_properties_on_edges="true",memory_limit=self._memory_limit,storage_gc_cycle_sec=self._storage_gc_cycle_sec) #memory_limit=self._memory_limit
+                self._start(storage_recover_on_startup=True, bolt_port=self._port, storage_properties_on_edges="true",
+                            memory_limit=self._memory_limit,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec)  # memory_limit=self._memory_limit
 
         else:
             self._start(db_recover_on_startup=True)
-   
+
     def start_dataset(self):
         # TODO: support custom benchmarking config files!
         if self._memgraph_version >= (0, 50, 0):
-            if(self._query_modules_directory!=""):
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,query_modules_directory=self._query_modules_directory,storage_properties_on_edges="true",memory_limit=self._memory_limit,anchor_num=self._anchor_num,storage_gc_cycle_sec=self._storage_gc_cycle_sec,real_time_flag=self._real_time_flag)#,isolation_level="READ_UNCOMMITTED"
+            if self._query_modules_directory != "":
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            query_modules_directory=self._query_modules_directory, storage_properties_on_edges="true",
+                            memory_limit=self._memory_limit, anchor_num=self._anchor_num,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec,
+                            real_time_flag=self._real_time_flag)  # ,isolation_level="READ_UNCOMMITTED"
             else:
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,storage_properties_on_edges="true",memory_limit=self._memory_limit,anchor_num=self._anchor_num,storage_gc_cycle_sec=self._storage_gc_cycle_sec,real_time_flag=self._real_time_flag)#,storage_gc_cycle_sec=6000,isolation_level="READ_UNCOMMITTED"
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            storage_properties_on_edges="true", memory_limit=self._memory_limit,
+                            anchor_num=self._anchor_num, storage_gc_cycle_sec=self._storage_gc_cycle_sec,
+                            real_time_flag=self._real_time_flag)  # ,storage_gc_cycle_sec=6000,isolation_level="READ_UNCOMMITTED"
         else:
             self._start(db_recover_on_startup=True)
-    
+
     def start_tgdb_clean_dataset(self):
         # TODO: support custom benchmarking config files!
         if self._memgraph_version >= (0, 50, 0):
-            if(self._query_modules_directory!=""):
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,query_modules_directory=self._query_modules_directory,
-                storage_properties_on_edges="true",memory_limit=self._memory_limit,anchor_num=self._anchor_num,storage_gc_cycle_sec=self._storage_gc_cycle_sec,real_time_flag=self._real_time_flag
-                ,retention_on_startup=self._retention_on_startup,retention_interval_sec=self._retention_interval_sec,retention_period_sec=self._retention_period_sec)#,isolation_level="READ_UNCOMMITTED"
+            if self._query_modules_directory != "":
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            query_modules_directory=self._query_modules_directory,
+                            storage_properties_on_edges="true", memory_limit=self._memory_limit,
+                            anchor_num=self._anchor_num, storage_gc_cycle_sec=self._storage_gc_cycle_sec,
+                            real_time_flag=self._real_time_flag
+                            , retention_on_startup=self._retention_on_startup,
+                            retention_interval_sec=self._retention_interval_sec,
+                            retention_period_sec=self._retention_period_sec)  # ,isolation_level="READ_UNCOMMITTED"
             else:
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,storage_properties_on_edges="true",memory_limit=self._memory_limit,anchor_num=self._anchor_num,storage_gc_cycle_sec=self._storage_gc_cycle_sec,real_time_flag=self._real_time_flag
-                ,retention_on_startup=self._retention_on_startup,retention_interval_sec=self._retention_interval_sec,retention_period_sec=self._retention_period_sec)#,storage_gc_cycle_sec=6000,isolation_level="READ_UNCOMMITTED"
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            storage_properties_on_edges="true", memory_limit=self._memory_limit,
+                            anchor_num=self._anchor_num, storage_gc_cycle_sec=self._storage_gc_cycle_sec,
+                            real_time_flag=self._real_time_flag
+                            , retention_on_startup=self._retention_on_startup,
+                            retention_interval_sec=self._retention_interval_sec,
+                            retention_period_sec=self._retention_period_sec)  # ,storage_gc_cycle_sec=6000,isolation_level="READ_UNCOMMITTED"
         else:
             self._start(db_recover_on_startup=True)
 
     def start_tgql_dataset(self):
         # TODO: support custom benchmarking config files!
         if self._memgraph_version >= (0, 50, 0):
-            if(self._query_modules_directory!=""):
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,query_modules_directory=self._query_modules_directory,storage_properties_on_edges="true",memory_limit=self._memory_limit,storage_gc_cycle_sec=self._storage_gc_cycle_sec)#,isolation_level="READ_UNCOMMITTED"
+            if self._query_modules_directory != "":
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            query_modules_directory=self._query_modules_directory, storage_properties_on_edges="true",
+                            memory_limit=self._memory_limit,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec)  # ,isolation_level="READ_UNCOMMITTED"
             else:
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,storage_properties_on_edges="true",memory_limit=self._memory_limit,storage_gc_cycle_sec=self._storage_gc_cycle_sec)#,storage_gc_cycle_sec=6000,isolation_level="READ_UNCOMMITTED"
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            storage_properties_on_edges="true", memory_limit=self._memory_limit,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec)
         else:
             self._start(db_recover_on_startup=True)
 
     def start_clockg_dataset(self):
         # TODO: support custom benchmarking config files!
         if self._memgraph_version >= (0, 50, 0):
-            if(self._query_modules_directory!=""):
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,query_modules_directory=self._query_modules_directory,storage_properties_on_edges="true",memory_limit=self._memory_limit,graph_operations=self._graph_operations,storage_gc_cycle_sec=self._storage_gc_cycle_sec)#,isolation_level="READ_UNCOMMITTED"
+            if self._query_modules_directory != "":
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            query_modules_directory=self._query_modules_directory, storage_properties_on_edges="true",
+                            memory_limit=self._memory_limit, graph_operations=self._graph_operations,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec)  # ,isolation_level="READ_UNCOMMITTED"
             else:
-                self._start(storage_snapshot_on_exit=True,storage_recover_on_startup=True,storage_snapshot_interval_sec=self._snapshot_interval_sec,bolt_port=self._port,storage_properties_on_edges="true",memory_limit=self._memory_limit,graph_operations=self._graph_operations,storage_gc_cycle_sec=self._storage_gc_cycle_sec)#,storage_gc_cycle_sec=6000,isolation_level="READ_UNCOMMITTED"
+                self._start(storage_snapshot_on_exit=True, storage_recover_on_startup=True,
+                            storage_snapshot_interval_sec=self._snapshot_interval_sec, bolt_port=self._port,
+                            storage_properties_on_edges="true", memory_limit=self._memory_limit,
+                            graph_operations=self._graph_operations,
+                            storage_gc_cycle_sec=self._storage_gc_cycle_sec)
         else:
             self._start(db_recover_on_startup=True)
 
     def stop(self):
         ret, usage = self._cleanup()
         assert ret == 0, "The database process exited with a non-zero " \
-            "status ({})!".format(ret)
+                         "status ({})!".format(ret)
         return usage
 
 
 class Client:
-    def __init__(self, client_binary, temporary_directory,memgraph_port):
+    def __init__(self, client_binary, temporary_directory, memgraph_port):
         self._client_binary = client_binary
-        self._directory = temporary_directory#tempfile.TemporaryDirectory(dir=temporary_directory)
-        self._port=memgraph_port 
+        self._directory = temporary_directory
+        self._port = memgraph_port
+
     def _get_args(self, **kwargs):
         return _convert_args_to_flags(self._client_binary, **kwargs)
 
@@ -239,28 +276,21 @@ class Client:
         queries_json = False
         if queries is not None:
             queries_json = True
-            file_path = queries#"/home/hjm/memgraph/tests/mgbench/test.json"#os.path.join(self._directory, "queries.json")#self._directory.name
+            file_path = queries
             with open(file_path, "w") as f:
                 for query in queries:
-                    print("query",query)
-            #         json.dump(query, f)
-            #         f.write("\n")
+                    print("query", query)
 
         args = self._get_args(input=file_path, num_workers=num_workers,
-                              queries_json=queries_json,max_retries=10000,port=self._port)
+                              queries_json=queries_json, max_retries=10000, port=self._port)
         # print("args:",args)
         ret = subprocess.run(args, stdout=subprocess.PIPE, check=True)
         data = ret.stdout.decode("utf-8").strip().split("\n")
-        # print(json.loads)
-        # print(data)
-        # print(data["planning_time"])
-        lists=list()
-        # print(data)
+        lists = list()
         for key in data:
-            if("[client.hpp" in key):
+            if "[client.hpp" in key:
                 continue
-            if("Running a bolt client" in key or "[info] " in key ):
+            if "Running a bolt client" in key or "[info] " in key:
                 continue
-            # print(key)
             lists.append(json.loads(key))
-        return lists#(map(json.loads, data))
+        return lists

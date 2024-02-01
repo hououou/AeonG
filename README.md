@@ -104,27 +104,74 @@ The arguments are almost same to the above create_temporal_database.p, except "-
 
 ## Experiments
 
-### Run experiments
-We provide scrips to compare our system with baseline systems, Clock-G and T-GQL. Our system and baseline systems can be pulled in the following docker image.
-      
+### Reproduce
+To reproduce our paper's results, please follow the steps outlined below. First, download the mgBench, LDBC, and gMark datasets. More detailed information about these datasets is available in our [benchmark](/tests/benchamrks/) directory. Additionally, our system and baseline systems can be obtained through the following Docker image. The binary of baseline systems can be found in our Docker image at /home/clockg[memgraph-master/aeong]/build/memgraph.
+
       docker pull hououou/aeong:v2
 
-You can use following scripts to reproduce our paper. For each workload, we compare among three aspects, including storage consumption, graph operation latency, and temporal query latency. The results will be printed by the shell. 
-You need to specify the number of generated graph operation ($num_op), the binary path of Clock-G ($clockg_binary), and the binary path of T-GQL ($memgraph_binary). You can find binary of baseline systems in our ducker image (/home/clockg[memgraph-master]/build/memgraph). 
-     
-       cd tests/experiments
-      ./t_mgBench_test.sh $num_op $clockg_binary $memgraph_binary
-      ./t_LDBC_test.sh $num_op $clockg_binary $memgraph_binary
-      ./t_gMark_test.sh $num_op $clockg_binary $memgraph_binary
-      
+#### AeonG vs Baseline Systems
+We provide scripts based on our benchmark generation tools and test tools to compare our system with baseline systems, Clock-G, and T-GQL. These scripts are available in the [srcipt directory](/tests/scripts/), and you can customize them based on your needs.
+
+* For Figure 8(a), 8(b), 9(a), 9(b), 9(c), and 9(d), where `$num_op` indicates the number of graph operations, `$clockg_binary` indicates the binary path of Clock-G, and `$memgraph_binary` indicates the binary path of T-GQL.
+
+        cd tests/experiments
+        ./t_mgBench_test.sh $num_op $clockg_binary $memgraph_binary
+
+* For Figure 8(c) and 9(e), use the following script to test the LDBC workload. Note that the LDBC workload is substantial and will take a considerable amount of time.
+
+      cd tests/experiments
+      ./t_LDBC_test.sh $clockg_binary $memgraph_binary
+
+* For Figure 8(d) and 9(f), use the following script.
+
+      cd tests/experiments
+      ./t_gMark_test.sh $clockg_binary $memgraph_binary
+
+#### Performance Analysis on AeonG
+To assess the performance of AeonG, please follow the steps outlined below.
+
+* Figure 10. This experiment does not require creating a temporal database. Evaluate queries inherited from the original [mgBench](https://github.com/memgraph/memgraph/blob/master/tests/mgbench/workloads/pokec.py), [LDBC](https://github.com/ldbc/ldbc_snb_interactive_v1_impls/tree/main/cypher/queries), and [gMark](https://github.com/gbagan/gmark/tree/master/demo)  benchmarks. First, load the original datasets into each database. Then, test AeonG compared to Memgraph by specifying the database path `--data-directory`, executor binary path (either AeonG or Memgraph) `--aeong-binary`, and evaluated query path `--temporal-query-cypher-path`.
+
+      cd tests/tools/
+      python3 evaluate_temporal_q.py --data-directory $database_path --aeong-binary $binary_path(aeong/memgraph) --temporal-query-cypher-path $query_cypher_path_value 
+
+* Figure 11(a). Use the following command by specifying the database path `--data-directory`, the query path `--temporal-query-cypher-path`, and GC cycle seconds `--storage-gc-cycle-sec`.
+
+      cd tests/tools/
+      python3 evaluate_temporal_q.py --data-directory $database_path --temporal-query-cypher-path $query_cypher_path_value --storage-gc-cycle-sec $gc_interval_value
+
+
+* Figure 11(b). Evaluate the effect of the anchor number. First, create a temporal database by varying `--anchor_num`. Then, evaluate temporal query latency.
+
+      cd tests/tools/
+      python3 create_temporal_database.py --anchor_num $anchor_num_value --data-directory $data_directory
+      python3 evaluate_temporal_q.py --data-directory $data_directory
+
+* Figure 11(c). Evaluate the retention period. Create a temporal database by varying the `--retention-period-sec` and then evaluate temporal query performance.
+
+      cd tests/tools/
+      python3 create_temporal_database.py --retention-period-sec $retention_period --data-directory $data_directory
+      python3 evaluate_temporal_q.py --data-directory $data_directory
+
+* Figure 11(d). Install TiKV first, then checkout the Aeon-G branch and rebuild the project. Vary temporal data by setting `--graph-operation-cypher-path` and set different cluster nodes of TiKV.
+
+      git checkout Aeon-G
+      cd build
+      cmake ..
+      make -j$(nproc)
+      cd tests/tools/
+      python3 create_temporal_database.py --data-directory $data_directory --graph-operation-cypher-path $graph_op_path 
+      python3 evaluate_temporal_query.py --data-directory $data_directory 
+
+
 ### Run AeonG manually
 You can also test AeonG performance according to your needs. We guide you with following steps:
 
 * Download dataset
-* Generate graph operation query statements. You can use generation tools in our benchmarks directory (/benchmarks/$workload_name/create_graph_op_queries.py).
-* Create temporal database. You can use the tool in our script directory (/tests/scripts/create_temporal_database.py). It will report the graph operation query latency and storage consumption.
-* Generate temporal query statements.  You can use generation tools in our benchmarks directory (/benchmarks/$workload_name/create_temporal_query.py).
-* Evaluate temporal performance. You can use the tool in our script directory (/tests/scripts/evaluate_temporal_q.py). It will report the temporal query latency.
+* Generate graph operation query statements. You can use generation tools in our benchmarks directory (`/benchmarks/$workload_name/create_graph_op_queries.py`).
+* Create temporal database. You can use the tool in our script directory (`/tests/scripts/create_temporal_database.py`). It will report the graph operation query latency and storage consumption.
+* Generate temporal query statements.  You can use generation tools in our benchmarks directory (`/benchmarks/$workload_name/create_temporal_query.py`).
+* Evaluate temporal performance. You can use the tool in our script directory (`/tests/scripts/evaluate_temporal_q.py`). It will report the temporal query latency.
 
 
 ## AeonG Implementation
@@ -165,3 +212,4 @@ We inherit the configuration from Memgraph. Thus we support all configuration de
 |----------|----------|----------|
 | --retention-period-sec       | Reclaim history period (in seconds). Set to 0 to disable reclaiming history from historical storage.       | 0       |
 | --retention-cycle-sec       | Reclaim history interval (in seconds).       | 60       |
+| --anchor-num       | Every anchor number between two deltas. Set to 0 to use our multiple anchor strategies.     | 0       |

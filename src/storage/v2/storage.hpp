@@ -223,56 +223,13 @@ class Storage final {
     std::optional<history_delta::History_delta>& GetHistoryDelta(){
       return storage_->saved_history_deltas_;
     }
-    EdgeAccessor CreateHistoryEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
-    EdgeAccessor CreateHistoryEdge2(const storage::EdgeAccessor &another,int index,history_delta::historyContext &historyContext_);
-    VertexAccessor CreateHistoryVertex(const storage::VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
-    VertexAccessor CreateHistoryVertex2(const storage::VertexAccessor &another,int index,history_delta::historyContext &historyContext_);
-    VertexAccessor CreateHistoryVertex3(uint64_t gid,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
-    
-    std::optional<EdgeAccessor> FindEdge(Gid gid);
-    Result<std::vector<EdgeAccessor>> Edges(std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> &edges_,const std::vector<EdgeTypeId> &edge_types,storage::Gid gid,bool from,std::optional<storage::Gid> existing_gid);
-    Gid IdToGid(const uint64_t key);
-
-
-    //v2.0 
-    storage::HistoryVertex CreateHistoryDelteVertex(uint64_t gid,nlohmann::json gid_delta_);
-    std::list<storage::HistoryEdge>  CreateHistoryDeleteEdgeFromVertex(const Delta* deltas,std::string types);
+    storage::HistoryVertex CreateHistoryVertexFromDelta(const VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & may_props,history_delta::historyContext& historyContext_);
     storage::HistoryVertex CreateHistoryVertexFromKV(const storage::HistoryVertex ,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
     storage::HistoryVertex CreateHistoryVertexFromKV(const VertexAccessor &another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_);
-    storage::HistoryVertex CreateHistoryVertexFromDelta(const VertexAccessor &another,int index,history_delta::historyContext& historyContext_);
-    storage::HistoryVertex CreateHistoryVertexFromDelta(const VertexAccessor &another,std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> & may_props,history_delta::historyContext& historyContext_);
-    storage::HistoryVertex CreateAnchorVertex(uint64_t gid,nlohmann::json gid_delta_,std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> in_edges,std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> out_edges);
-    
-    storage::HistoryEdge CreateHistoryEdgeFromDelta(const storage::EdgeAccessor &another);
-    storage::HistoryEdge CreateHistoryEdgeFromDelta(storage::HistoryEdge another,int index);
-
-    storage::HistoryEdge CreateHistoryEdgeFromDelta(const EdgeAccessor &another,int index);
     storage::HistoryEdge CreateHistoryEdgeFromKV(const EdgeAccessor &another,nlohmann::json gid_delta_);
     storage::HistoryEdge CreateHistoryEdgeFromKV(storage::HistoryEdge edge_,nlohmann::json gid_delta_);
-    storage::HistoryEdge CreateAnchorEdge(const storage::EdgeAccessor &another,nlohmann::json gid_delta_);
-    void InitVertex(storage::Vertex *his_vertex,std::vector<storage::LabelId> &labels,std::vector<std::pair<uint64_t,uint64_t>> &labels_tt,std::map<storage::PropertyId, std::tuple<storage::PropertyValue,uint64_t,uint64_t>> &props_tt,uint64_t tt_ts,uint64_t tt_te);
-    void InitVertex(storage::Vertex *vertex,history_delta::historyContextOnce &historyContext,bool delete_flag,std::vector<int> dead_deltas,std::vector<nlohmann::json> deleted_kv);
-    
-    void getHistoryVertexFromDelta(storage::Vertex *current_vertex,std::vector<int> dead_deltas,history_delta::historyContextOnce &historyContext);
-    void getHistoryVertexFromKV(std::vector<nlohmann::json> deleted_kv,history_delta::historyContextOnce &historyContext);
-    VertexAccessor getHistoryVertexOnce(const VertexAccessor &another,std::vector<int> dead_deltas,std::vector<nlohmann::json> deleted_kv,history_delta::historyContextOnce& historyContext,bool delted_flag);
-    
-    std::list<Gid> getdeletedvertex(){
-      std::list<Gid> current_deleted_vertices;
-      storage_->recover_deleted_vertices_.WithLock(
-        [&](auto &deleted_vertices) { 
-          current_deleted_vertices=std::move(deleted_vertices);
-      });
-
-      return current_deleted_vertices;
-    }
-
-
-    std::list<storage::Vertex*> getdeletedvertex2(){
-      std::list<storage::Vertex*> current_deleted_vertices;
-      storage_->hjm_deleted_vertices.swap(current_deleted_vertices);
-      return current_deleted_vertices;
-    }
+    Result<std::vector<EdgeAccessor>> Edges(std::vector<std::tuple<EdgeTypeId, Vertex *, EdgeRef>> &edges_,const std::vector<EdgeTypeId> &edge_types,storage::Gid gid,bool from,std::optional<storage::Gid> existing_gid);
+    Gid IdToGid(const uint64_t key);
     std::optional<VertexAccessor> FindDeleteVertex(Gid gid, View view);
 
     std::optional<std::vector<std::tuple<storage::HistoryEdge*,uint64_t,uint64_t>>> FindHistoryEdge(uint64_t gid,uint64_t c_ts,uint64_t c_te){
@@ -614,7 +571,7 @@ class Storage final {
   //aeong store updated vertices (optional)
   std::map<std::tuple<uint64_t,uint64_t,uint64_t>,std::vector<std::tuple<storage::HistoryEdge*,uint64_t,uint64_t>>> all_edge;
   std::map<std::tuple<uint64_t,uint64_t,uint64_t>,std::list<storage::HistoryVertex*>> all_vertex;
- std::set<std::tuple<uint64_t,uint64_t,uint64_t>> all_vertex_flag;
+  std::set<std::tuple<uint64_t,uint64_t,uint64_t>> all_vertex_flag;
   std::set<std::tuple<uint64_t,uint64_t,uint64_t>> all_edge_flag;
 
   // Even though the edge count is already kept in the `edges_` SkipList, the
