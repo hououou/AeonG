@@ -78,7 +78,7 @@ output=$(python3 "$tgql_script" $csv_path $TGQL_cypher_file_path)
 
 # TODO: build origin tgql database using gen_ldbc_db
 tgql_dir=${database_root}/tgql
-mkdir -p ${clockg_dir}
+mkdir -p ${tgql_dir}
 
 tgql_db_script="${script_dir}/get_ldbc_tgql_db.py"
 memg_binary="--aeong-binary $memgraph_binary"
@@ -108,9 +108,10 @@ number_workers="--num-workers 1"
 database_directory="--data-directory ${database_root}/aeong/sf${scale_factor}"
 index_path="--index-cypher-path $dataset_root/cypher_index.cypher"
 graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/cypher.txt"
-python_script="../scripts/create_original_database.py"
+benchmark_type="--benchmark-type ldbc"
+python_script="../scripts/create_temporal_database.py"
 echo "=============AeonG create database, it cost time==========="
-output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
+output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -124,9 +125,9 @@ aeong_binary="--aeong-binary $clockg_binary"
 clockg_snapshot="--clockg-snapshot 80000"
 database_directory="--data-directory $database_root/clockg/sf${scale_factor}"
 binary_type="--binary-type clockg"
-python_script="../scripts/create_original_database.py"
+python_script="../scripts/create_temporal_database.py"
 echo "=============Clock-G create database, it cost time==========="
-output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
+output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -137,14 +138,14 @@ echo "storage_consumption:$storage_consumption"
 
 #Create TGQL temporal database, get graph operation latency, and get space
 aeong_binary="--aeong-binary $memgraph_binary"
-database_directory="--data-directory $database_root/clockg/sf${scale_factor}"
+database_directory="--data-directory $database_root/tgql/sf${scale_factor}"
 index_path="--index-cypher-path $dataset_root/TGQL_index.cypher"
 graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/TGQL_cypher.txt"
 binary_type="--binary-type tgql"
-python_script="../scripts/create_original_database.py"
+python_script="../scripts/create_temporal_database.py"
 echo "=============T-GQL create database, it cost time==========="
 python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $original_dataset $index_path
-output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $binary_type)
+output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $binary_type $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -219,7 +220,7 @@ if [ "$update_num" -eq 1000000 ]; then
   aeong_binary="--aeong-binary $memgraph_binary"
   min_time="--min-time $start_time"
   max_time="--max-time $end_time"
-  python_script="../benchmarks/T-mgBench/create_temporal_query.py"
+  python_script="../benchmarks/T-LDBC/create_temporal_query.py"
   output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
   temporal_q1="--temporal-query-cypher-path $temporal_query_path/IS1_TGQL_cypher.txt"
   temporal_q2="--temporal-query-cypher-path $temporal_query_path/IS2_TGQL_cypher.txt"

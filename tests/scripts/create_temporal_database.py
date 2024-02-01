@@ -133,6 +133,9 @@ if __name__ == "__main__":
     parser.add_argument("--binary-type",
                         default="aeong",
                         help="aeong, tgql, clockg")
+    parser.add_argument("--benchmark-type",
+                        default="mgbench",
+                        help="mgbench, ldbc, gmark")
 
     args = parser.parse_args()
     parsed_args = vars(args)
@@ -146,7 +149,8 @@ if __name__ == "__main__":
     # create index
     client.execute(file_path=args.index_cypher_path, num_workers=args.num_workers)
     # create original database
-    client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
+    if args.benchmark_type == "mgbench":
+        client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
     # process graph operations to generate historical data
     start_time = int(time.time() * 1000000)
     graph_op_ret = client.execute(file_path=args.graph_operation_cypher_path, num_workers=args.num_workers)
