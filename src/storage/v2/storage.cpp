@@ -430,12 +430,7 @@ Storage::Storage(Config config)
       uuid_(utils::GenerateUUID()),
       epoch_id_(utils::GenerateUUID()),
       global_locker_(file_retainer_.AddLocker()) {
-        //hjm begin
-      // saved_history_deltas_.init(config_.durability.storage_directory/"history_deltas");
-         saved_history_deltas_.emplace(config_.durability.storage_directory/"history_deltas",config_.items.realTimeFlag);
-        //recover kv's time_table index
-        // saved_history_deltas_->GetTimeTableAll(); //hjm begin timetable
-        //hjm end
+        saved_history_deltas_tikv_.emplace(config_.items.realTimeFlag);
   if (config_.durability.snapshot_wal_mode != Config::Durability::SnapshotWalMode::DISABLED ||
       config_.durability.snapshot_on_exit || config_.durability.recover_on_startup) {
     // Create the directory initially to crash the database in case of
@@ -2206,7 +2201,7 @@ void Storage::CollectGarbage() {
       auto start=a.transaction_st;
       auto commit=a.commit_timestamp;
       if(a.transaction_st!=a.commit_timestamp){
-        saved_history_deltas_->SaveDelta(a.gid,a.to_gid,start,commit,a,name_id_mapper_);
+        saved_history_deltas_tikv_->SaveDelta(a.gid,a.to_gid,start,commit,a,name_id_mapper_);
         saved_gids.emplace_back(a.gid,a.transaction_st,a.commit_timestamp);
       }
     }
@@ -2224,7 +2219,7 @@ void Storage::CollectGarbage() {
         data2[property_name] = property_value;
       }
       data["SP"]=data2;
-      auto prefix=saved_history_deltas_->getPrefix(gid,ts,false);
+      auto prefix=saved_history_deltas_tikv_->getPrefix(gid,ts,false);
       gid_anchor_all_[prefix]=data.dump();
     }
 
@@ -2247,7 +2242,7 @@ void Storage::CollectGarbage() {
         add_labels.emplace_back("AL",name_id_mapper_.IdToName(label.AsUint()));//name_id_mapper_.IdToName(label.AsUint())
       }
       data["L"] =add_labels;
-      auto prefix=saved_history_deltas_->getPrefix(gid,ts,true);
+      auto prefix=saved_history_deltas_tikv_->getPrefix(gid,ts,true);
       gid_anchor_all_[prefix]=data.dump();
     }
     
@@ -2300,8 +2295,8 @@ void Storage::CollectGarbage() {
     
     //hjm end
     // saved_history_deltas_->GetAll();
-    saved_history_deltas_->SaveDeltaAll();
-    saved_history_deltas_->SaveAnchorAll(gid_anchor_all_);
+    saved_history_deltas_tikv_->SaveDeltaAll();
+    saved_history_deltas_tikv_->SaveAnchorAll(gid_anchor_all_);
 
     // saved_history_deltas_->SaveTimeTableAll();
     std::list<Gid> current_deleted_edges1;

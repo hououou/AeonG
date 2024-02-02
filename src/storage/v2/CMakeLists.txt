@@ -13,7 +13,8 @@ set(storage_v2_src_files
     storage.cpp
     history_delta.cpp
     history_vertex.hpp
-    history_edge.hpp)
+    history_edge.hpp
+        history_delta_tikv.cpp)
 
 ##### Replication #####
 
@@ -35,9 +36,10 @@ set(storage_v2_src_files
 
 find_package(gflags REQUIRED)
 find_package(Threads REQUIRED)
+find_package(tikvcpp 0.1.0)
 
 add_library(mg-storage-v2 STATIC ${storage_v2_src_files})
-target_link_libraries(mg-storage-v2 Threads::Threads mg-utils gflags)
+target_link_libraries(mg-storage-v2 Threads::Threads mg-utils gflags tikvcpp tikvrust pthread dl ssl crypto)
 
 add_dependencies(mg-storage-v2 generate_lcp_storage)
-target_link_libraries(mg-storage-v2 mg-rpc mg-slk)
+target_link_libraries(mg-storage-v2 mg-rpc mg-slk tikvcpp tikvrust pthread dl ssl crypto)

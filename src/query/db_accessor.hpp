@@ -317,6 +317,9 @@ class DbAccessor final {
     if (maybe_edges.HasError()) return maybe_edges.GetError();
     return iter::imap(MakeEdgeAccessor, std::move(*maybe_edges));
   }
+    std::optional<history_delta_tikv::History_delta_tikv>& GetHistoryDelta(){
+        return accessor_->GetHistoryDelta();
+    }
 
   storage::Gid IdToGid(const uint64_t key) { return accessor_->IdToGid(key); }
   storage::HistoryVertex CreateHistoryVertexFromKV(const storage::HistoryVertex another,nlohmann::json gid_delta_,history_delta::historyContext &historyContext_){

@@ -75,10 +75,11 @@
     LOG_FATAL("Operator " #class_name " has no single input!");  \
   }
 
-namespace history_delta{
-extern bool TemporalCheck(uint64_t object_ts,uint64_t object_te,uint64_t c_ts,uint64_t c_te,std::string type);
-extern std::pair<std::vector< std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> >,bool> getDeadInfo2(query::VertexAccessor current_vertex_,uint64_t c_ts,uint64_t c_te,std::string types_);
-extern  std::vector<std::string> splits(const std::string &str, const std::string &pattern);
+namespace history_delta_tikv{
+    extern bool TemporalCheck(uint64_t object_ts,uint64_t object_te,uint64_t c_ts,uint64_t c_te,std::string type);
+    extern std::pair<std::vector< std::tuple< std::map<storage::PropertyId,storage::PropertyValue>,uint64_t,uint64_t> >,bool> getDeadInfo2(query::VertexAccessor current_vertex_,uint64_t c_ts,uint64_t c_te,std::string types_);
+    extern std::pair<bool,std::pair<std::vector<int>,std::vector<nlohmann::json>>> getHistoryInfo(uint64_t object_gid,std::map<uint64_t,std::vector<nlohmann::json>> &fiter_history_datas_,std::optional<query::VertexAccessor> current_vertex_,std::optional<storage::HistoryEdge*> current_edge_,uint64_t c_ts,uint64_t c_te,std::string types_,bool is_vertex);
+    extern  std::vector<std::string> splits(const std::string &str, const std::string &pattern);
 };
 
 namespace EventCounter {
@@ -396,7 +397,7 @@ bool addHistoryVertex(query::VertexAccessor &current_vertex_,history_delta::hist
           delete_flag=true;
         }
     }
-    if(!delete_flag && !history_delta::TemporalCheck(obj_ts,obj_te,historyContext_.c_ts,historyContext_.c_te,historyContext_.types)){//删除当前数据库中的节点
+    if(!delete_flag && !history_delta_tikv::TemporalCheck(obj_ts,obj_te,historyContext_.c_ts,historyContext_.c_te,historyContext_.types)){//删除当前数据库中的节点
         delete_flag=true;
     }
     if(!delete_flag && obj_ts>=obj_te) delete_flag=true;
@@ -412,7 +413,7 @@ bool addHistoryVertex(query::VertexAccessor &current_vertex_,history_delta::hist
     //加入历史节点的数据
     storage::HistoryVertex current_vertex1;
     bool history_flag=false;
-    auto [dead_deltas,need_deleted_flag]=history_delta::getDeadInfo2(current_vertex_,historyContext_.c_ts, historyContext_.c_te,historyContext_.types);
+    auto [dead_deltas,need_deleted_flag]=history_delta_tikv::getDeadInfo2(current_vertex_,historyContext_.c_ts, historyContext_.c_te,historyContext_.types);
     for (auto dead_delta:dead_deltas){
         current_vertex1=context.db_accessor->CreateHistoryVertexFromDelta((current_vertex_).impl_,dead_delta,historyContext_);
         history_flag=true;
@@ -443,7 +444,7 @@ bool addHistoryVertex2(query::VertexAccessor &current_vertex_,history_delta::his
   //加入历史节点的数据
   storage::HistoryVertex current_vertex1;
   bool history_flag=false;
-  auto [dead_deltas,need_deleted_flag]=history_delta::getDeadInfo2(current_vertex_,historyContext_.c_ts, historyContext_.c_te,historyContext_.types);
+  auto [dead_deltas,need_deleted_flag]=history_delta_tikv::getDeadInfo2(current_vertex_,historyContext_.c_ts, historyContext_.c_te,historyContext_.types);
   for (auto dead_delta:dead_deltas){
     current_vertex1=context.db_accessor->CreateHistoryVertexFromDelta((current_vertex_).impl_,dead_delta,historyContext_);
     history_flag=true;
@@ -974,7 +975,7 @@ void pull_nodes_current_history(ExecutionContext &context,VertexAccessor current
   auto tt_te=current_vertex.tt_te();
   auto vertex=TypedValue(current_vertex);
   if(tt_ts<=obj_te&&obj_ts<=tt_te){//节点 边 &obj_ts<=tt_te
-    if(history_delta::TemporalCheck(tt_ts,tt_te,historyContext_.c_ts,historyContext_.c_te,historyContext_.types)){////判断是否需要删除当前数据库的节点
+    if(history_delta_tikv::TemporalCheck(tt_ts,tt_te,historyContext_.c_ts,historyContext_.c_te,historyContext_.types)){////判断是否需要删除当前数据库的节点
       history_add_.emplace_back(current_edge,vertex);
       if(historyContext_.types=="as of") return;
     }
@@ -1002,7 +1003,7 @@ void addHistoryEdge(EdgeAccessor current_edge_,uint64_t current_v_ts,uint64_t cu
   }
 
   //判断是否需要删除当前数据库的边 2、当前边不在符合的时间范围内
-  if(!history_delta::TemporalCheck(obj_ts,obj_te,historyContext_.c_ts,historyContext_.c_te,historyContext_.types)){//删除当前数据库中的节点
+  if(!history_delta_tikv::TemporalCheck(obj_ts,obj_te,historyContext_.c_ts,historyContext_.c_te,historyContext_.types)){//删除当前数据库中的节点
     delete_flag=true;
   }
   

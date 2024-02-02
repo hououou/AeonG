@@ -42,6 +42,8 @@
 #include "utils/skip_list.hpp"
 #include "utils/synchronized.hpp"
 #include "utils/uuid.hpp"
+#include <tikv/tikv_client.h>
+#include "storage/v2/history_delta_tikv.hpp"
 
 /// REPLICATION ///
 #include "rpc/server.hpp"
@@ -219,6 +221,10 @@ class Storage final {
 
     /// @throw std::bad_alloc
     VertexAccessor CreateVertex();
+
+    std::optional<history_delta_tikv::History_delta_tikv>& GetHistoryDelta(){
+      return storage_->saved_history_deltas_tikv_;
+    }
 
     std::optional<history_delta::History_delta>& GetHistoryDelta(){
       return storage_->saved_history_deltas_;
@@ -602,7 +608,7 @@ class Storage final {
   std::mutex gc_lock_;
 
   //aeong historical store
-  std::optional<history_delta::History_delta> saved_history_deltas_;//{"history_delta"};
+  std::optional<history_delta_tikv::History_delta_tikv> saved_history_deltas_tikv_;
   utils::Synchronized<std::map<uint64_t,uint64_t>, utils::SpinLock> transaction_tables_;//store transactionid commit_timestamp
   std::vector<uint64_t> hjm_deleted_vertices_;
   std::list<storage::Vertex*>  hjm_deleted_vertices;
