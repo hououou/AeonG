@@ -13,11 +13,13 @@ function print_help () {
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 base_dir="${script_dir}/../.."
 build_dir="${base_dir}/build"
+scripts_dir="${base_dir}/test/scripts" # scripts directory for test
 dataset_root="${script_dir}/tests/datasets/T-LDBC"
 database_root="${script_dir}/tests/results/database/T-LDBC"
 cd build_dir/tools/src
 make
 
+# download original ldbc dataset
 cd $dataset_root/original_csv
 wget --no-check-certificate https://repository.surfsara.nl/datasets/cwi/snb/files/social_network-csv_basic/social_network-csv_basic-sf${scale_factor}.tar.zst
 zstd -d social_network-csv_basic-sf${scale_factor}.tar.zst
@@ -60,7 +62,7 @@ csv_dataset="
 memgraph_snapshot_dir=${database_root}/aeong/sf${scale_factor}
 mkdir -p ${memgraph_snapshot_dir}
 cd ${memgraph_snapshot_dir}
-echo "Converting CSV dataset to '${memgraph_snapshot_dir}/snapshot'"
+echo "Converting CSV dataset to '${memgraph_snapshot_dir}'"
 ${build_dir}/tools/src/mg_import_csv --data-directory memgraph ${csv_dataset} --csv-delimiter "|" --array-delimiter ";"
 echo "Finish building!"
 
@@ -80,11 +82,12 @@ output=$(python3 "$tgql_script" $csv_path $TGQL_cypher_file_path)
 tgql_dir=${database_root}/tgql
 mkdir -p ${tgql_dir}
 
-tgql_db_script="${script_dir}/create_temporal_database.py"
+tgql_db_script="${scripts_dir}/create_temporal_database.py"
 memg_binary="--aeong-binary $memgraph_binary"
-client_binary="--client-binary ../../build/tests/mgbench/client"
+client_binary="--client-binary ${build_dir}/tests/mgbench/client"
 number_workers="--num-workers 1"
 db_dir="--data-directory $tgql_dir/sf${scale_factor}"
+mkdir -p ${db_dir}
 tgql_dataset_path="--original-dataset-cypher-path $dataset_dir/tgql/"
 index_path="--index-cypher-path $dataset_root/TGQL_index.cypher"
 benchmark_type="--benchmark-type ldbc"
@@ -105,14 +108,14 @@ python_script="$base_dir/tests/benchmarks/T-LDBC/create_graph_op_queries.py"
 output=$(python3 "$python_script" $update_num_arg $dataset_path $write_path)
 
 #Create AeonG temporal database, get graph operation latency, and get space
-aeong_binary="--aeong-binary ../../build/memgraph"
-client_binary="--client-binary ../../build/tests/mgbench/client"
+aeong_binary="--aeong-binary ${build_dir}/memgraph"
+client_binary="--client-binary ${build_dir}/tests/mgbench/client"
 number_workers="--num-workers 1"
 database_directory="--data-directory ${database_root}/aeong/sf${scale_factor}"
 index_path="--index-cypher-path $dataset_root/cypher_index.cypher"
 graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/cypher.txt"
 benchmark_type="--benchmark-type ldbc"
-python_script="../scripts/create_temporal_database.py"
+python_script="${scripts_dir}/create_temporal_database.py"
 echo "=============AeonG create database, it cost time==========="
 output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
@@ -128,7 +131,7 @@ aeong_binary="--aeong-binary $clockg_binary"
 clockg_snapshot="--clockg-snapshot 80000"
 database_directory="--data-directory $database_root/clockg/sf${scale_factor}"
 binary_type="--binary-type clockg"
-python_script="../scripts/create_temporal_database.py"
+python_script="${scripts_dir}/create_temporal_database.py"
 echo "=============Clock-G create database, it cost time==========="
 output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
@@ -145,7 +148,7 @@ database_directory="--data-directory $database_root/tgql/sf${scale_factor}"
 index_path="--index-cypher-path $dataset_root/TGQL_index.cypher"
 graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/TGQL_cypher.txt"
 binary_type="--binary-type tgql"
-python_script="../scripts/create_temporal_database.py"
+python_script="${scripts_dir}/create_temporal_database.py"
 echo "=============T-GQL create database, it cost time==========="
 python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $index_path
 output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $database_directory $index_path $graph_op_cypher_path $binary_type $benchmark_type)
@@ -159,24 +162,24 @@ echo "storage_consumption:$storage_consumption"
 
 # Evaluation on T-LDBC
 echo "=============Various temporal query performance==========="
-prefix_path="../results/"
+prefix_path="$base_dir/tests/results/"
 op_num="--num-op $update_num"
 min_time="--min-time 90791306"
 max_time="--max-time 92732774"
 frequency_type="--frequency-type mix"
 write_path="--write-path $prefix_path/T-LDBC"
-temporal_query_path=$prefix_path"/T-LDBC/temporal_query"
+temporal_query_path=“$prefix_path/T-LDBC/temporal_query”
 rm -rf temporal_query_path
 mkdir -p temporal_query_path
-python_script="../benchmarks/T-LDBC/create_temporal_query.py"
+python_script="$base_dir/tests/benchmarks/T-LDBC/create_temporal_query.py"
 output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
 
-aeong_binary="--aeong-binary ../../build/memgraph"
-client_binary="--client-binary ../../build/tests/mgbench/client"
+aeong_binary="--aeong-binary ${build_dir}/memgraph"
+client_binary="--client-binary ${build_dir}/tests/mgbench/client"
 number_workers="--num-workers 1"
 database_directory="--data-directory ${database_root}/aeong/sf${scale_factor}"
 index_path="--index-cypher-path $dataset_root/cypher_index.cypher"
-python_script="../scripts/evaluate_temporal_q.py"
+python_script="${scripts_dir}/evaluate_temporal_q.py"
 temporal_q1="--temporal-query-cypher-path $temporal_query_path/IS1_cypher.txt"
 temporal_q2="--temporal-query-cypher-path $temporal_query_path/IS2_cypher.txt"
 temporal_q3="--temporal-query-cypher-path $temporal_query_path/IS3_cypher.txt"
@@ -222,7 +225,7 @@ python3 "$python_script" $aeong_binary $client_binary $number_workers $database_
 aeong_binary="--aeong-binary $memgraph_binary"
 min_time="--min-time $start_time"
 max_time="--max-time $end_time"
-python_script="../benchmarks/T-LDBC/create_temporal_query.py"
+python_script="$base_dir/tests/benchmarks/T-LDBC/create_temporal_query.py"
 output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
 temporal_q1="--temporal-query-cypher-path $temporal_query_path/IS1_TGQL_cypher.txt"
 temporal_q2="--temporal-query-cypher-path $temporal_query_path/IS2_TGQL_cypher.txt"
