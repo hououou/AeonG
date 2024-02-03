@@ -87,21 +87,23 @@ clockg_dir=${database_root}/clockg
 mkdir -p ${clockg_dir}
 cp -r ${memgraph_snapshot_dir} ${clockg_dir}/
 
-# build origin tgql database using gen_ldbc_db
+# build origin tgql database using create_temporal_database
 tgql_dir=${database_root}/tgql
 tgql_node_dir=${save_dir}/${type}-a-${num}k/tgql_node.txt
 tgql_edge_dir=${save_dir}/${type}-a-${num}k/tgql_edge.txt
 mkdir -p ${tgql_dir}
 
-tgql_db_script="${script_dir}/get_gmark_tgql_db.py"
+tgql_db_script="${script_dir}/create_temporal_database.py"
 memg_binary="--aeong-binary $memgraph_binary"
 client_binary="--client-binary ../../build/tests/mgbench/client"
 number_workers="--num-workers 1"
 db_dir="--data-directory $tgql_dir/${type}-a-${num}k"
-tgql_node_path="--node-path $tgql_node_dir"
-tgql_edge_path="--edge-path $tgql_edge_dir"
+tgql_dataset_path="--original-dataset-cypher-path ${save_dir}/${type}-a-${num}k/"
 index_path="--index-cypher-path $dataset_root/TGQL_index.cypher"
-output=$(python3 "$tgql_db_script" $memg_binary $client_binary $db_dir $tgql_node_path $tgql_edge_path $number_workers $index_path)
+benchmark_type="--benchmark-type gmark"
+binary_type="--binary-type tgql"
+load_type="--load-cypher-flag 1"
+output=$(python3 "$tgql_db_script" $memg_binary $client_binary $db_dir $tgql_dataset_path $number_workers $index_path $benchmark_type $binary_type $load_type)
 
 #Create AeonG temporal database, get graph operation latency, and get space
 aeong_binary="--aeong-binary ../../build/memgraph"
@@ -113,7 +115,7 @@ graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/cypher.txt"
 benchmark_type="--benchmark-type gmark"
 python_script="../scripts/create_temporal_database.py"
 echo "=============AeonG create database, it cost time==========="
-output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $benchmark_type)
+output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -129,7 +131,7 @@ database_directory="--data-directory $database_root/clockg/${type}-a-${num}k"
 binary_type="--binary-type clockg"
 python_script="../scripts/create_temporal_database.py"
 echo "=============Clock-G create database, it cost time==========="
-output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $benchmark_type)
+output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -146,8 +148,8 @@ graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/TGQL_cypher.t
 binary_type="--binary-type tgql"
 python_script="../scripts/create_temporal_database.py"
 echo "=============T-GQL create database, it cost time==========="
-python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $original_dataset $index_path
-output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $binary_type $benchmark_type)
+python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $index_path
+output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $database_directory $index_path $graph_op_cypher_path $binary_type $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -157,42 +159,40 @@ echo "graph_op_latency:$graph_op_latency"
 echo "storage_consumption:$storage_consumption"
 
 # Evaluation on T-gMark
-if [ "$update_num" -eq 100000 ]; then
-  echo "=============Various temporal query performance==========="
-  prefix_path="../results/"
-  op_num="--num-op $update_num"
-  min_time="--min-time 453365" # 269547
-  max_time="--max-time 812243" # 269547
-  write_path="--write-path $prefix_path/T-gMark/${type}-a-${num}k/"
-  gmark_query_path="--gmark-query-path $save_dir/${type}-a-${num}k/query/processed"
-  python_script="../benchmarks/T-gMark/create_temporal_query.py"
-  output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path gmark_query_path)
+echo "=============Various temporal query performance==========="
+prefix_path="../results/"
+op_num="--num-op $update_num"
+min_time="--min-time 1076408" # 269547
+max_time="--max-time 2086333" # 269547
+write_path="--write-path $prefix_path/T-gMark/${type}-a-${num}k/"
+gmark_query_path="--gmark-query-path $save_dir/${type}-a-${num}k/query/processed"
+python_script="../benchmarks/T-gMark/create_temporal_query.py"
+output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path gmark_query_path)
 
-  aeong_binary="--aeong-binary ../../build/memgraph"
-  client_binary="--client-binary ../../build/tests/mgbench/client"
-  number_workers="--num-workers 1"
-  database_directory="--data-directory ${database_root}/aeong/${type}-a-${num}k"
-  index_path="--index-cypher-path $dataset_root/cypher_index.cypher"
-  python_script="../scripts/evaluate_temporal_q.py"
-  temporal_q1="--temporal-query-cypher-path $write_path/temporal_query/cypher.txt"
-  
-  echo "AeonG q1"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
-  
+aeong_binary="--aeong-binary ../../build/memgraph"
+client_binary="--client-binary ../../build/tests/mgbench/client"
+number_workers="--num-workers 1"
+database_directory="--data-directory ${database_root}/aeong/${type}-a-${num}k"
+index_path="--index-cypher-path $dataset_root/cypher_index.cypher"
+python_script="../scripts/evaluate_temporal_q.py"
+temporal_q1="--temporal-query-cypher-path $write_path/temporal_query/cypher.txt"
+
+echo "AeonG q1"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
+
 #  echo "Evaluate Clock-G temporal database, get temporal query latency,"
-  aeong_binary="--aeong-binary $clockg_binary"
-  binary_type="--binary-type clockg"
-  echo "Clock-G q1"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
+aeong_binary="--aeong-binary $clockg_binary"
+binary_type="--binary-type clockg"
+echo "Clock-G q1"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
 
 #  echo "Evaluate T-GQL temporal database, get temporal query latency,"
-  aeong_binary="--aeong-binary $memgraph_binary"
-  min_time="--min-time $start_time"
-  max_time="--max-time $end_time"
-  python_script="../benchmarks/T-gMark/create_temporal_query.py"
-  output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
-  temporal_q1="--temporal-query-cypher-path $write_path/temporal_query/TGQL_cypher.txt"
-  echo "T-GQL q1"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
-fi
+aeong_binary="--aeong-binary $memgraph_binary"
+min_time="--min-time $start_time"
+max_time="--max-time $end_time"
+python_script="../benchmarks/T-gMark/create_temporal_query.py"
+output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
+temporal_q1="--temporal-query-cypher-path $write_path/temporal_query/TGQL_cypher.txt"
+echo "T-GQL q1"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
 
