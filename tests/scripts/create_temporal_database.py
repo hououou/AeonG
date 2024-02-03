@@ -143,6 +143,9 @@ if __name__ == "__main__":
     parser.add_argument("--retention-period-sec", type=int,
                         default=0,
                         help="Retention period duration (seconds)")
+    parser.add_argument("--load-cypher-flag", type=int,
+                        default=0,
+                        help="whether or not to create original database")
 
     args = parser.parse_args()
     parsed_args = vars(args)
@@ -156,17 +159,36 @@ if __name__ == "__main__":
     # create index
     client.execute(file_path=args.index_cypher_path, num_workers=args.num_workers)
     # create original database
-    if args.benchmark_type == "mgbench":
-        client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
-    # process graph operations to generate historical data
-    start_time = int(time.time() * 1000000)
-    graph_op_ret = client.execute(file_path=args.graph_operation_cypher_path, num_workers=args.num_workers)
-    end_time = int(time.time() * 1000000)
-    if args.binary_type == "clockg":
-        # need time to store historical data
-        time.sleep(5 * 60)
-    if args.binary_type == "aeong":
-        time.sleep(60)
-    aeong.stop()
-    print(graph_op_ret[0]['duration'] / graph_op_ret[0]['count'],
-          get_space(args.data_directory, args.binary_type) / 1024 / 1024, start_time, end_time)
+    if args.load_cypher_flag == 1:
+        if args.benchmark_type == "ldbc":
+            #create nodes
+            working_directory = Path(args.original_dataset_cypher_path).absolute()
+            nodes_file = sorted(working_directory.glob("*.txt"))
+            for file in nodes_file:
+                ret1_test = client.execute(file_path=args.original_dataset_cypher_path+file.name, num_workers=args.num_workers)
+            #create edges
+            working_directory = Path(f'{args.original_dataset_cypher_path}/edges').absolute()
+            edges_file = sorted(working_directory.glob("*.txt"))
+            for file in edges_file:
+                ret1_test = client.execute(file_path=f'{args.original_dataset_cypher_path}/edges/{file.name}', num_workers=args.num_workers)
+                time.sleep(3)
+        elif args.benchmark_type == "gmark":
+            #create nodes
+            ret1_test = client.execute(file_path=f'{args.original_dataset_cypher_path}/tgql_node.txt', num_workers=args.num_workers)
+            #create edges
+            ret1_test = client.execute(file_path=f'{args.original_dataset_cypher_path}/tgql_edge.txt', num_workers=args.num_workers)
+    else:
+        if args.benchmark_type == "mgbench":
+            client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
+        # process graph operations to generate historical data
+        start_time = int(time.time() * 1000000)
+        graph_op_ret = client.execute(file_path=args.graph_operation_cypher_path, num_workers=args.num_workers)
+        end_time = int(time.time() * 1000000)
+        if args.binary_type == "clockg":
+            # need time to store historical data
+            time.sleep(5 * 60)
+        if args.binary_type == "aeong":
+            time.sleep(60)
+        aeong.stop()
+        print(graph_op_ret[0]['duration'] / graph_op_ret[0]['count'],
+            get_space(args.data_directory, args.binary_type) / 1024 / 1024, start_time, end_time)
