@@ -19,7 +19,7 @@ queries with efficient capability and data consistent guarantee.
 ## Getting Started
 
 ### Build System Dependencies
-You can follow the detailed information provided by [Memgraph](https://memgraph.notion.site/Quick-Start-82a99a85e62a4e3d89f6a9fb6d35626d) to build system dependencies. We also provide a docker image to simplify this step. We recommend using docker to build AeonG.
+You can refer to the comprehensive documentation provided by [Memgraph](https://memgraph.notion.site/Quick-Start-82a99a85e62a4e3d89f6a9fb6d35626d) for building system dependencies. Additionally, we offer a Docker image to streamline this process. We highly recommend utilizing Docker for building AeonG.
 
     docker pull hououou/aeong:v1
 
@@ -56,49 +56,49 @@ After the compliation, you can run AeonG
 
 
 ## Benchmarks
-We support three temporal benchmarks to evaluate the performances. More details can be found in [tests/benchmarks/README.md](/tests/benchmarks/README.md)
+We provide support for three temporal benchmarks to evaluate temporal performance. Additional details can be found in  [tests/benchmarks/README.md](/tests/benchmarks/README.md)
 
-* We can automatically generate graph operation query statements for generating temporal data.
+* We can automatically generate graph operation query statements for generating temporal data. To do that, execute the following:
 
         cd tests/benchmarks/$workloadname
         python create_graph_op_quries.py --arg $arg_value
 
-* We can generate temporal query statements for evaluating temporal performance.
+* We can generate temporal query statements for evaluating temporal performance. To do that, execute the following:
 
         cd tests/benchmarks/$workloadname
         python create_temporal_query.py --arg $arg_value
 
 ## Tools
-We provide tools to create temporal database and evaluate temporal database. Those tools can be found in [srcipt directory](/tests/scripts/).
+We provide tools for creating temporal databases and evaluating temporal database performance. These tools can be found in the [srcipt directory](/tests/scripts/).
 
 ### Create temporal database
-It will report the average graph operation query latency and the storage consumptions of generated temproal database.
+We provide a tool that can report the average graph operation query latency and the storage consumption of the generated temporal database. To use it, execute the following:
 
     cd tests/scripts/
     python3 create_temporal_database.py
 
-You can specify optional arguments to generate the desirable temporal database.  You can also check specific arguments in each workload.
+You can specify optional arguments to generate the desired temporal database. Check specific arguments for each workload by executing:
 
     python create_temporal_database.py --help
 
-| Flag | Description | 
-|----------|----------|
-|--aeong-binary|AeonG binary|
-|--client-binary|client binary|
-|--num-workers|number of workers |
-|--data-directory|directory path where temporal data should be stored|
-|--original-dataset-cypher-path|directory path where temporal data should be stored|
-|--index-cypher-path|index query path|
-|--graph-operation-cypher-path|directory path where temporal data should be stored|
-|--no-properties-on-edges|disable properties on edges|
+| Flag | Description                                                                      | 
+|----------|----------------------------------------------------------------------------------|
+|--aeong-binary| AeonG binary                                                                     |
+|--client-binary| Client binary                                                                    |
+|--num-workers| Number of workers                                                                |
+|--data-directory| Directory path where temporal database should be stored                          |
+|--original-dataset-cypher-path| Directory path indicating the original dataset cypher query statements           |
+|--index-cypher-path| Index query path                                                           |
+|--graph-operation-cypher-path| Directory path indicating where the graph operation query statements should be stored |
+|--no-properties-on-edges| Disable properties on edges                                                      |
 
 ### Evaluate temporal query performance
-It will report the average temproal query latency.
+We provide a tool that can report the average temporal query latency.
 
     cd tests/scripts/
     python3 evaluate_temporal_q.py
 
-The arguments are almost same to the above create_temporal_database.p, except "--temporal-query-cypher-path" indicating temporal query path. You can specify optional arguments to generate the desirable temporal database.  You can also check specific arguments in each workload.
+The arguments are almost the same as for create_temporal_database.py, except for `--temporal-query-cypher-path` indicating the temporal query path. You can specify optional arguments to generate the desired temporal database. Check specific arguments for each workload by executing:
 
     python evaluate_temporal_q.py --help
 
@@ -175,23 +175,22 @@ You can also test AeonG performance according to your needs. We guide you with f
 
 
 ## AeonG Implementation
-AeonG is extended based on Memgraph. The details of our idea can be found in our [paper](https://hououou.github.io/AeonG/docs/aeong-extended-version-vldb24.pdf). We also refer Memgraph [internal docs](https://memgraph.notion.site/Memgraph-Internals-12b69132d67a417898972927d6870bd2) to better understand our codes. We made following major changes to support temporal features.
+AeonG is an extension of Memgraph. Details of our concept can be found in our [paper](https://hououou.github.io/AeonG/docs/aeong-extended-version-vldb24.pdf). We also refer Memgraph's [internal documentation](https://memgraph.notion.site/Memgraph-Internals-12b69132d67a417898972927d6870bd2) to better understand our codes. We made following major changes to support temporal features.
 
-* storage engine:
-  * timestamps: import timestamps into [Vertex](./src/storage/v2/vertex.hpp), [Edge](./src/storage/v2/edge.hpp), and [Delta](./src/storage/v2/delta.hpp) strutures.
-  * data migaration: add data migration in the [Storage::CollectGarbage()](.src/storage/v2/storage.cpp) to migrate unreclaiemd data to RocksDB
-  * retain historical data in RocksDB: [historical_delta.cpp](./src/storage/v2/history_delta.cpp) is used to transfer deltas to key-value formats and store them to RocksDB.
-* query engine:
-  * add temporal syntax in [Cypher.g4](./src/query/frontend/opencypher/grammar/Cypher.g4).
-  * extend scan operator:   In the
-    [ScanAllCursor.Pull()](./src/query/plan/operator.cpp) function, we introduce a function AddHistoricalVertices() to capture both unreclaimed and reclaimed historical versions
-  * extend scan operator:   In the
-    [ ExpandCursor.Pull()](./src/query/plan/operator.cpp) function, we introduce a function AddHistoricalEdges() to capture both unreclaimed and reclaimed historical versions
-
+* Storage Engine:
+  * Timestamps: Import timestamps into [Vertex](/src/storage/v2/vertex.hpp), [Edge](/src/storage/v2/edge.hpp), and [Delta](/src/storage/v2/delta.hpp) strutures.
+  * Data Migration: Add data migration in the [Storage::CollectGarbage()](/src/storage/v2/storage.cpp) function to migrate unreclaimed data to RocksDB.
+  * Retain Historical Data in RocksDB: Utilize [historical_delta.cpp](/src/storage/v2/history_delta.cpp) to transfer deltas to key-value formats and store them to RocksDB.
+* Query Engine:
+  * Add Temporal Syntax in [Cypher.g4](/src/query/frontend/opencypher/grammar/Cypher.g4).
+  * Extend Scan Operator: In the
+    [ScanAllCursor.Pull()](/src/query/plan/operator.cpp) function, we introduce a function AddHistoricalVertices() to capture both unreclaimed and reclaimed historical versions.
+  * Extend scan operator:   In the
+    [ ExpandCursor.Pull()](/src/query/plan/operator.cpp) function, we introduce a function AddHistoricalEdges() to capture both unreclaimed and reclaimed historical versions.
 
 
 ## Configuration settings
-We inherit the configuration from Memgraph. Thus we support all configuration described in Memgraph. We refer the details in this [link](https://memgraph.com/docs/configuration/configuration-settings). Additionally, AeonG supports two more configurations to provide temporal features.
+We inherit the configuration settings from Memgraph, thus supporting all configurations described in Memgraph. For detailed information, please refer to this [link](https://memgraph.com/docs/configuration/configuration-settings). Additionally, AeonG supports three more configurations to provide temporal features.
 
 ### General Settings
 
@@ -212,4 +211,4 @@ We inherit the configuration from Memgraph. Thus we support all configuration de
 |----------|----------|----------|
 | --retention-period-sec       | Reclaim history period (in seconds). Set to 0 to disable reclaiming history from historical storage.       | 0       |
 | --retention-cycle-sec       | Reclaim history interval (in seconds).       | 60       |
-| --anchor-num       | Every anchor number between two deltas. Set to 0 to use our multiple anchor strategies.     | 0       |
+| --anchor-num       | Anchor number between two deltas. Set to 0 to use our multiple anchor strategies.    | 0       |
