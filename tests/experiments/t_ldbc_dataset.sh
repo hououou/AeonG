@@ -76,18 +76,21 @@ csv_path="--ldbc-csv-path $dataset_dir"
 TGQL_cypher_file_path="--TGQL-cypher-file-path $dataset_dir/tgql/"
 output=$(python3 "$tgql_script" $csv_path $TGQL_cypher_file_path)
 
-# TODO: build origin tgql database using gen_ldbc_db
+# TODO: build origin tgql database using create_temporal_database
 tgql_dir=${database_root}/tgql
 mkdir -p ${tgql_dir}
 
-tgql_db_script="${script_dir}/get_ldbc_tgql_db.py"
+tgql_db_script="${script_dir}/create_temporal_database.py"
 memg_binary="--aeong-binary $memgraph_binary"
 client_binary="--client-binary ../../build/tests/mgbench/client"
 number_workers="--num-workers 1"
 db_dir="--data-directory $tgql_dir/sf${scale_factor}"
-tgql_dataset_path="--dataset-path $dataset_dir/tgql/"
+tgql_dataset_path="--original-dataset-cypher-path $dataset_dir/tgql/"
 index_path="--index-cypher-path $dataset_root/TGQL_index.cypher"
-output=$(python3 "$tgql_db_script" $memg_binary $client_binary $db_dir $tgql_dataset_path $number_workers $index_path)
+benchmark_type="--benchmark-type ldbc"
+binary_type="--binary-type tgql"
+load_type="--load-cypher-flag 1"
+output=$(python3 "$tgql_db_script" $memg_binary $client_binary $db_dir $tgql_dataset_path $number_workers $index_path $benchmark_type $binary_type $load_type)
 
 #create graph operation
 #echo "Create graph operation query statements"
@@ -111,7 +114,7 @@ graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/cypher.txt"
 benchmark_type="--benchmark-type ldbc"
 python_script="../scripts/create_temporal_database.py"
 echo "=============AeonG create database, it cost time==========="
-output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $benchmark_type)
+output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -127,7 +130,7 @@ database_directory="--data-directory $database_root/clockg/sf${scale_factor}"
 binary_type="--binary-type clockg"
 python_script="../scripts/create_temporal_database.py"
 echo "=============Clock-G create database, it cost time==========="
-output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $benchmark_type)
+output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $index_path $graph_op_cypher_path $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -144,8 +147,8 @@ graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/TGQL_cypher.t
 binary_type="--binary-type tgql"
 python_script="../scripts/create_temporal_database.py"
 echo "=============T-GQL create database, it cost time==========="
-python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $original_dataset $index_path
-output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path $binary_type $benchmark_type)
+python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $index_path
+output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $database_directory $index_path $graph_op_cypher_path $binary_type $benchmark_type)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
 start_time=$(echo "$output" | awk '{print $3}')
@@ -155,92 +158,90 @@ echo "graph_op_latency:$graph_op_latency"
 echo "storage_consumption:$storage_consumption"
 
 # Evaluation on T-LDBC
-if [ "$update_num" -eq 1000000 ]; then
-  echo "=============Various temporal query performance==========="
-  prefix_path="../results/"
-  op_num="--num-op $update_num"
-  min_time="--min-time 453365" # 269547
-  max_time="--max-time 812243" # 269547
-  frequency_type="--frequency-type mix"
-  write_path="--write-path $prefix_path/T-LDBC"
-  temporal_query_path=$prefix_path"/T-LDBC/temporal_query"
-  rm -rf temporal_query_path
-  mkdir -p temporal_query_path
-  python_script="../benchmarks/T-LDBC/create_temporal_query.py"
-  output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
+echo "=============Various temporal query performance==========="
+prefix_path="../results/"
+op_num="--num-op $update_num"
+min_time="--min-time 90791306"
+max_time="--max-time 92732774"
+frequency_type="--frequency-type mix"
+write_path="--write-path $prefix_path/T-LDBC"
+temporal_query_path=$prefix_path"/T-LDBC/temporal_query"
+rm -rf temporal_query_path
+mkdir -p temporal_query_path
+python_script="../benchmarks/T-LDBC/create_temporal_query.py"
+output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
 
-  aeong_binary="--aeong-binary ../../build/memgraph"
-  client_binary="--client-binary ../../build/tests/mgbench/client"
-  number_workers="--num-workers 1"
-  database_directory="--data-directory ${database_root}/aeong/sf${scale_factor}"
-  index_path="--index-cypher-path $dataset_root/cypher_index.cypher"
-  python_script="../scripts/evaluate_temporal_q.py"
-  temporal_q1="--temporal-query-cypher-path $temporal_query_path/IS1_cypher.txt"
-  temporal_q2="--temporal-query-cypher-path $temporal_query_path/IS2_cypher.txt"
-  temporal_q3="--temporal-query-cypher-path $temporal_query_path/IS3_cypher.txt"
-  temporal_q4="--temporal-query-cypher-path $temporal_query_path/IS4_cypher.txt"
-  temporal_q5="--temporal-query-cypher-path $temporal_query_path/IS5_cypher.txt"
-  temporal_q6="--temporal-query-cypher-path $temporal_query_path/IS6_cypher.txt"
-  temporal_q7="--temporal-query-cypher-path $temporal_query_path/IS7_cypher.txt"
-  
-  echo "AeonG q1 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
-  echo "AeonG q2 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q2
-  echo "AeonG q3 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q3
-  echo "AeonG q4 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q4
-  echo "AeonG q5 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q5
-  echo "AeonG q6 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q6
-  echo "AeonG q7 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q7
-  
+aeong_binary="--aeong-binary ../../build/memgraph"
+client_binary="--client-binary ../../build/tests/mgbench/client"
+number_workers="--num-workers 1"
+database_directory="--data-directory ${database_root}/aeong/sf${scale_factor}"
+index_path="--index-cypher-path $dataset_root/cypher_index.cypher"
+python_script="../scripts/evaluate_temporal_q.py"
+temporal_q1="--temporal-query-cypher-path $temporal_query_path/IS1_cypher.txt"
+temporal_q2="--temporal-query-cypher-path $temporal_query_path/IS2_cypher.txt"
+temporal_q3="--temporal-query-cypher-path $temporal_query_path/IS3_cypher.txt"
+temporal_q4="--temporal-query-cypher-path $temporal_query_path/IS4_cypher.txt"
+temporal_q5="--temporal-query-cypher-path $temporal_query_path/IS5_cypher.txt"
+temporal_q6="--temporal-query-cypher-path $temporal_query_path/IS6_cypher.txt"
+temporal_q7="--temporal-query-cypher-path $temporal_query_path/IS7_cypher.txt"
+
+echo "AeonG q1 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
+echo "AeonG q2 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q2
+echo "AeonG q3 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q3
+echo "AeonG q4 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q4
+echo "AeonG q5 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q5
+echo "AeonG q6 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q6
+echo "AeonG q7 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q7
+
 #  echo "Evaluate Clock-G temporal database, get temporal query latency,"
-  aeong_binary="--aeong-binary $clockg_binary"
-  binary_type="--binary-type clockg"
-  echo "Clock-G q1 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
-  echo "Clock-G q2 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q2
-  echo "Clock-G q3 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q3
-  echo "Clock-G q4 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q4
-  echo "Clock-G q5 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q5
-  echo "Clock-G q6 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q6
-  echo "Clock-G q7 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q7
+aeong_binary="--aeong-binary $clockg_binary"
+binary_type="--binary-type clockg"
+echo "Clock-G q1 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
+echo "Clock-G q2 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q2
+echo "Clock-G q3 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q3
+echo "Clock-G q4 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q4
+echo "Clock-G q5 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q5
+echo "Clock-G q6 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q6
+echo "Clock-G q7 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q7
 
 #  echo "Evaluate T-GQL temporal database, get temporal query latency,"
-  aeong_binary="--aeong-binary $memgraph_binary"
-  min_time="--min-time $start_time"
-  max_time="--max-time $end_time"
-  python_script="../benchmarks/T-LDBC/create_temporal_query.py"
-  output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
-  temporal_q1="--temporal-query-cypher-path $temporal_query_path/IS1_TGQL_cypher.txt"
-  temporal_q2="--temporal-query-cypher-path $temporal_query_path/IS2_TGQL_cypher.txt"
-  temporal_q3="--temporal-query-cypher-path $temporal_query_path/IS3_TGQL_cypher.txt"
-  temporal_q4="--temporal-query-cypher-path $temporal_query_path/IS4_TGQL_cypher.txt"
-  temporal_q5="--temporal-query-cypher-path $temporal_query_path/IS5_TGQL_cypher.txt"
-  temporal_q6="--temporal-query-cypher-path $temporal_query_path/IS6_TGQL_cypher.txt"
-  temporal_q7="--temporal-query-cypher-path $temporal_query_path/IS7_TGQL_cypher.txt"
-  echo "T-GQL q1 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
-  echo "T-GQL q2 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q2
-  echo "T-GQL q3 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q3
-  echo "T-GQL q4 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q4
-  echo "T-GQL q5 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q5
-  echo "T-GQL q6 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q6
-  echo "T-GQL q7 mix"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q7
-fi
+aeong_binary="--aeong-binary $memgraph_binary"
+min_time="--min-time $start_time"
+max_time="--max-time $end_time"
+python_script="../benchmarks/T-LDBC/create_temporal_query.py"
+output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
+temporal_q1="--temporal-query-cypher-path $temporal_query_path/IS1_TGQL_cypher.txt"
+temporal_q2="--temporal-query-cypher-path $temporal_query_path/IS2_TGQL_cypher.txt"
+temporal_q3="--temporal-query-cypher-path $temporal_query_path/IS3_TGQL_cypher.txt"
+temporal_q4="--temporal-query-cypher-path $temporal_query_path/IS4_TGQL_cypher.txt"
+temporal_q5="--temporal-query-cypher-path $temporal_query_path/IS5_TGQL_cypher.txt"
+temporal_q6="--temporal-query-cypher-path $temporal_query_path/IS6_TGQL_cypher.txt"
+temporal_q7="--temporal-query-cypher-path $temporal_query_path/IS7_TGQL_cypher.txt"
+echo "T-GQL q1 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
+echo "T-GQL q2 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q2
+echo "T-GQL q3 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q3
+echo "T-GQL q4 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q4
+echo "T-GQL q5 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q5
+echo "T-GQL q6 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q6
+echo "T-GQL q7 mix"
+python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q7
