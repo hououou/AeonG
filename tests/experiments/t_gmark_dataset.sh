@@ -88,7 +88,7 @@ fi
 mkdir -p ${aeong_database_root}
 cd ${aeong_database_root}
 echo "Converting CSV dataset to '${aeong_database_root}'"
-${build_dir}/tools/src/mg_import_csv  --data-directory ${aeong_database_root} ${gmark_dataset} --delimiter "|" --array-delimiter ";"
+${build_dir}/src/mg_import_csv  --data-directory ${aeong_database_root} ${gmark_dataset} --delimiter "|" --array-delimiter ";"
 
 # convert to gmark-clockg dataset
 mkdir -p ${clockg_database_root}

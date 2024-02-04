@@ -9,17 +9,17 @@ echo "Prepare datasets"
 mkdir -p ../datasets/T-mgBench
 mgbench_download_dir="../datasets/T-mgBench"
 dataset_url="https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/pokec/benchmark/pokec_small_import.cypher"
-#curl -o "$mgbench_download_dir/cypher.cypher" "$dataset_url"
-#index_url="https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/pokec/benchmark/memgraph.cypher"
-#curl -o "$mgbench_download_dir/cypher_index.cypher" "$index_url"
-#echo "Download mgbench dataset completed."
+curl -o "$mgbench_download_dir/cypher.cypher" "$dataset_url"
+index_url="https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/pokec/benchmark/memgraph.cypher"
+curl -o "$mgbench_download_dir/cypher_index.cypher" "$index_url"
+echo "Download mgbench dataset completed."
 
-#convert to tgql dataset
-#python_script="get_mgbench_tgql_dataset.py"
-#cypher_file_path="--cypher-file-path $mgbench_download_dir/cypher.cypher"
-#TGQL_cypher_file_path="--TGQL-cypher-file-path $mgbench_download_dir/TGQL.cypher"
-#python_script="get_mgbench_tqgl_dataset.py"
-#output=$(python3 "$python_script" $cypher_file_path $TGQL_cypher_file_path)
+convert to tgql dataset
+python_script="get_mgbench_tgql_dataset.py"
+cypher_file_path="--cypher-file-path $mgbench_download_dir/cypher.cypher"
+TGQL_cypher_file_path="--TGQL-cypher-file-path $mgbench_download_dir/TGQL.cypher"
+python_script="get_mgbench_tqgl_dataset.py"
+output=$(python3 "$python_script" $cypher_file_path $TGQL_cypher_file_path)
 
 #create graph operation
 #echo "Create graph operation query statements"
@@ -45,25 +45,30 @@ original_dataset="--original-dataset-cypher-path $mgbench_download_dir/cypher.cy
 index_path="--index-cypher-path $mgbench_download_dir/cypher_index.cypher"
 graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/cypher.txt"
 python_script="../scripts/create_temporal_database.py"
-#echo "=============AeonG create database, it cost time==========="
-#output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
-#graph_op_latency=$(echo "$output" | awk '{print $1}')
-#storage_consumption=$(echo "$output" | awk '{print $2}')
-#start_time=$(echo "$output" | awk '{print $3}')
-#end_time=$(echo "$output" | awk '{print $4}')
-#echo "=============AeonG graph operation latency & spance==========="
-#echo "graph_op_latency:$graph_op_latency"
-#echo "storage_consumption:$storage_consumption"
+echo "=============AeonG create database, it cost time==========="
+output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
+graph_op_latency=$(echo "$output" | awk '{print $1}')
+storage_consumption=$(echo "$output" | awk '{print $2}')
+start_time=$(echo "$output" | awk '{print $3}')
+end_time=$(echo "$output" | awk '{print $4}')
+echo "=============AeonG graph operation latency & spance==========="
+echo "graph_op_latency:$graph_op_latency"
+echo "storage_consumption:$storage_consumption"
 
 #Create ClockG temporal database, get graph operation latency, and get space"
-aeong_binary="--aeong-binary $clockg_binary"
-rm -rf $prefix_path/database/clockg
-mkdir -p $prefix_path/database/clockg
+aeong_binary="--aeong-binary ../../build/memgraph"
 clockg_snapshot="--clockg-snapshot 80000"
 database_directory="--data-directory $prefix_path/database/clockg"
-binary_type="--binary-type clockg"
+rm -rf $prefix_path/database/clockg
+mkdir -p $prefix_path/database/clockg
 python_script="../scripts/create_temporal_database.py"
+index_path="--index-cypher-path $mgbench_download_dir/cypher_index.cypher"
+graph_op_cypher_path="--graph-operation-cypher-path $mgbench_download_dir/cypher_index.cypher"
+output=$(python3 $python_script $aeong_binary $client_binary $original_dataset_path $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
 echo "=============Clock-G create database, it cost time==========="
+aeong_binary="--aeong-binary $clockg_binary"
+binary_type="--binary-type clockg"
+graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/cypher.txt"
 output=$(python3 "$python_script" $aeong_binary $client_binary $binary_type $clockg_snapshot $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
 graph_op_latency=$(echo "$output" | awk '{print $1}')
 storage_consumption=$(echo "$output" | awk '{print $2}')
@@ -73,7 +78,7 @@ echo "=============Clock-G graph operation latency & spance==========="
 echo "graph_op_latency:$graph_op_latency"
 echo "storage_consumption:$storage_consumption"
 
-#Create TGQL temporal database, get graph operation latency, and get space
+Create TGQL temporal database, get graph operation latency, and get space
 aeong_binary="--aeong-binary $memgraph_binary"
 rm -rf $prefix_path/database/TGQL
 mkdir -p $prefix_path/database/TGQL
@@ -94,12 +99,12 @@ echo "=============T-GQL graph operation latency & spance==========="
 echo "graph_op_latency:$graph_op_latency"
 echo "storage_consumption:$storage_consumption"
 
-if [ "$update_num" -eq 400000 ]; then
+if [ "$update_num" -eq 320000 ]; then
   echo "=============Various temporal query performance==========="
   prefix_path="../results/"
   op_num="--num-op $update_num"
-  min_time="--min-time 453365" # 269547
-  max_time="--max-time 812243" # 269547
+  min_time="--min-time 453365"
+  max_time="--max-time 812243"
   frequency_type="--frequency-type mix"
   write_path="--write-path $prefix_path"
   temporal_query_path=$prefix_path"temporal_query"
@@ -127,7 +132,7 @@ if [ "$update_num" -eq 400000 ]; then
   echo "AeonG q4 mix"
   python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q4
 
-#  echo "Evaluate Clock-G temporal database, get temporal query latency,"
+  echo "Evaluate Clock-G temporal database, get temporal query latency,"
   aeong_binary="--aeong-binary $clockg_binary"
   binary_type="--binary-type clockg"
   echo "Clock-G q1 mix"
@@ -139,7 +144,7 @@ if [ "$update_num" -eq 400000 ]; then
   echo "Clock-G q4 mix"
   python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $binary_type $index_path $temporal_q4
 
-#  echo "Evaluate T-GQL temporal database, get temporal query latency,"
+  echo "Evaluate T-GQL temporal database, get temporal query latency,"
   aeong_binary="--aeong-binary $memgraph_binary"
   min_time="--min-time $start_time"
   max_time="--max-time $end_time"
@@ -169,7 +174,7 @@ if [ "$update_num" -eq 400000 ]; then
   output=$(python3 "$python_script" $min_time $max_time $op_num $frequency_type $write_path)
   echo "AeonG hot"
   python_script="../scripts/evaluate_temporal_q.py"
-  temporal_q="--temporal-query-cypher-path $temporal_query_path/cypher_Q1.txt"
+  temporal_q="--temporal-query-cypher-path $temporal_query_path/cypher_Q3.txt"
   aeong_binary="--aeong-binary ../../build/memgraph"
   python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q
   echo "Clock-G hot"
@@ -182,7 +187,7 @@ if [ "$update_num" -eq 400000 ]; then
   max_time="--max-time $end_time"
   python_script="../benchmarks/T-mgBench/create_temporal_query.py"
   output=$(python3 "$python_script" $min_time $max_time $op_num $frequency_type $write_path)
-  temporal_q3="--temporal-query-cypher-path $temporal_query_path/TGQLcypher_Q1.txt"
+  temporal_q3="--temporal-query-cypher-path $temporal_query_path/TGQLcypher_Q3.txt"
   python_script="../scripts/evaluate_temporal_q.py"
   python3 "$python_script" $aeong_binary $client_binary $op_num $number_workers $database_directory $index_path $temporal_q3
 
@@ -195,7 +200,7 @@ if [ "$update_num" -eq 400000 ]; then
   output=$(python3 "$python_script" $min_time $max_time $op_num $frequency_type $write_path)
   echo "AeonG warm"
   python_script="../scripts/evaluate_temporal_q.py"
-  temporal_q="--temporal-query-cypher-path $temporal_query_path/cypher_Q1.txt"
+  temporal_q="--temporal-query-cypher-path $temporal_query_path/cypher_Q3.txt"
   aeong_binary="--aeong-binary ../../build/memgraph"
   python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q
   echo "Clock-G warm"
@@ -221,7 +226,7 @@ if [ "$update_num" -eq 400000 ]; then
   output=$(python3 "$python_script" $min_time $max_time $op_num $frequency_type $write_path)
   echo "AeonG cold"
   python_script="../scripts/evaluate_temporal_q.py"
-  temporal_q="--temporal-query-cypher-path $temporal_query_path/cypher_Q1.txt"
+  temporal_q="--temporal-query-cypher-path $temporal_query_path/cypher_Q3.txt"
   aeong_binary="--aeong-binary ../../build/memgraph"
   python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q
   echo "Clock-G cold"
