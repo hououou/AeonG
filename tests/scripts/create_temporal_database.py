@@ -162,15 +162,18 @@ if __name__ == "__main__":
     if args.load_tgql_flag == 1:
         if args.benchmark_type == "ldbc":
             #create nodes
-            working_directory = args.original_dataset_cypher_path
-            for root, _, filenames in os.walk(working_directory):
-               for filename in filenames:
-                    ret1_test = client.execute(file_path=args.original_dataset_cypher_path+"/"+filename, num_workers=args.num_workers)
+            folder_path = args.original_dataset_cypher_path
+            files_in_folder = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+            for filename in files_in_folder:
+                # print(args.original_dataset_cypher_path+"/"+filename)
+                ret1_test = client.execute(file_path=args.original_dataset_cypher_path+"/"+filename, num_workers=args.num_workers)
             #create edges
             working_directory2 = f'{args.original_dataset_cypher_path}/edges'
             for root, _, filenames in os.walk(working_directory2):
                 for filename in filenames:
-                    ret1_test = client.execute(file_path=f'{args.original_dataset_cypher_path}/edges/{filename}', num_workers=args.num_workers)
+                    edge_path=f"{args.original_dataset_cypher_path}/edges/{filename}"
+                    # print(edge_path)
+                    ret1_test = client.execute(file_path=edge_path, num_workers=args.num_workers)
                     time.sleep(3)
         elif args.benchmark_type == "gmark":
             #create nodes
