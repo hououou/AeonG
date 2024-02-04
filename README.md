@@ -105,9 +105,16 @@ The arguments are almost the same as for create_temporal_database.py, except for
 ## Experiments
 
 ### Reproduce
-To reproduce our paper's results, please follow the steps outlined below. First, download the mgBench, LDBC, and gMark datasets. More detailed information about these datasets is available in our [benchmark](/tests/benchamrks/) directory. Additionally, our system and baseline systems can be obtained through the following Docker image. The binary of baseline systems can be found in our Docker image at /home/clockg[memgraph-master/aeong]/build/memgraph.
+To reproduce our paper's results, please follow the steps outlined below. First, download the mgBench, LDBC, and gMark datasets. More detailed information about these datasets is available in our [benchmark](/tests/benchamrks/) directory. Additionally, our system and baseline systems can be obtained through the following Docker image.
+You need to first build our system and baseline systems, using the following scripts. Then the binary of baseline systems can be found in our Docker image at /home/clockg[memgraph-master/aeong]/build/memgraph.
 
       docker pull hououou/aeong:v2
+      docker run it aeong:v2
+      cd /home/aeong[memgraph-master/clockg]
+      mkdir build
+      cmake ..
+      make -j$(nproc) memgraph
+
 
 #### AeonG vs Baseline Systems
 We provide scripts based on our benchmark generation tools and test tools to compare our system with baseline systems, Clock-G, and T-GQL. These scripts are available in the [srcipt directory](/tests/scripts/), and you can customize them based on your needs.
