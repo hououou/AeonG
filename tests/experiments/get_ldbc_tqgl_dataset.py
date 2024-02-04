@@ -147,20 +147,69 @@ class create_Dataset():
         self.create_edge(self.post_hasTag_tag, "hasTag")
         self.create_edge(self.post_isLocatedIn_place, "isLocatedIn")
 
+    def get_index(self,write_path):
+        query1 = "CREATE INDEX ON :Object (title);\n"
+        query2 = "CREATE INDEX ON :Attribute(title);\n"
+        query3 = "CREATE INDEX ON :Value(title);\n"
+        index_path = write_path + "/../ldbc_tgql_index.cypher"
+        f = open(index_path, "w", encoding='utf-8')
+        f.write(query1)
+        f.write(query2)
+        f.write(query3)
+        f.close()
+        tgql_cypher=f"""CREATE INDEX ON :City(id);
+            CREATE INDEX ON :Comment(id);
+            CREATE INDEX ON :Country(id);
+            CREATE INDEX ON :Forum(id);
+            CREATE INDEX ON :Message(id);
+            CREATE INDEX ON :Organisation(id);
+            CREATE INDEX ON :Person(id);
+            CREATE INDEX ON :Post(id);
+            CREATE INDEX ON :Tag(id);
+            CREATE INDEX ON :TagClass(id);
+            CREATE INDEX ON :Place(id);
+            CREATE INDEX ON :Country(name);
+            CREATE INDEX ON :Message(creationDate);
+            CREATE INDEX ON :Person(firstName);
+            CREATE INDEX ON :Post(creationDate);
+            CREATE INDEX ON :Tag(name);
+            CREATE INDEX ON :TagClass(name);
+            CREATE INDEX ON :Person;
+            CREATE INDEX ON :City;
+            CREATE INDEX ON :Continent;
+            CREATE INDEX ON :Country;
+            CREATE INDEX ON :Place;
+            CREATE INDEX ON :Forum;
+            CREATE INDEX ON :Comment;
+            CREATE INDEX ON :Message;
+            CREATE INDEX ON :Organisation;
+            CREATE INDEX ON :University;
+            CREATE INDEX ON :Company;
+            CREATE INDEX ON :Person;
+            CREATE INDEX ON :Post;
+            CREATE INDEX ON :Tag;
+            CREATE INDEX ON :TagClass;
+            """
+        index_path = write_path + "/../ldbc_index.cypher"
+        f = open(index_path, "w", encoding='utf-8')
+        f.write(tgql_cypher)
+        f.close()
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="AeonG create t-gql dataset for ldbc.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--ldbc-csv-path",
-                        default="../datasets/T-mgBench/cypher.cypher",
+                        default="../datasets/T-LDBC/original_csv",
                         help="Dataset Cypher query path")
     parser.add_argument("--TGQL-cypher-file-path",
-                        default="../datasets/T-mgBench/TGQL.cypher",
-                        help="Dataset Cypher query path")
+                        default="../datasets/T-LDBC/tgql",
+                        help="Dataset tqgl query path")
     # self.t_gql_directory = "/data/hjm/social_network-csv_basic-sf0.1/t-gql/"
     # ldbc_csv_path = "/data/hjm/social_network-csv_basic-sf0.1"
     args = parser.parse_args()
     ds = create_Dataset(args.ldbc_csv_path, args.TGQL_cypher_file_path)
     ds.create_edges()
     ds.create_nodes()
+    ds.get_index(args.TGQL_cypher_file_path)
 

@@ -1,25 +1,25 @@
 #!/bin/bash
-update_num=$1 #320000
-clockg_binary=$2 #/home/hjm/vldb/clockg/build/memgraph
-memgraph_binary=$3 #/home/hjm/vldb/memgraph-master/build/memgraph
+update_num=320000 #$1 #320000
+clockg_binary=/home/hjm/vldb/clockg/build/memgraph #$2 #/home/hjm/vldb/clockg/build/memgraph
+memgraph_binary=/home/hjm/vldb/memgraph-master/build/memgraph #$3 #/home/hjm/vldb/memgraph-master/build/memgraph
 
 # # download T-mgBench
 echo "Prepare datasets"
-download original dataset
+#download original dataset
 mkdir -p ../datasets/T-mgBench
 mgbench_download_dir="../datasets/T-mgBench"
 dataset_url="https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/pokec/benchmark/pokec_small_import.cypher"
-curl -o "$mgbench_download_dir/cypher.cypher" "$dataset_url"
-index_url="https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/pokec/benchmark/memgraph.cypher"
-curl -o "$mgbench_download_dir/cypher_index.cypher" "$index_url"
-echo "Download mgbench dataset completed."
+#curl -o "$mgbench_download_dir/cypher.cypher" "$dataset_url"
+#index_url="https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/pokec/benchmark/memgraph.cypher"
+#curl -o "$mgbench_download_dir/cypher_index.cypher" "$index_url"
+#echo "Download mgbench dataset completed."
 
 #convert to tgql dataset
-python_script="get_mgbench_tgql_dataset.py"
-cypher_file_path="--cypher-file-path $mgbench_download_dir/cypher.cypher"
-TGQL_cypher_file_path="--TGQL-cypher-file-path $mgbench_download_dir/TGQL.cypher"
-python_script="get_mgbench_tqgl_dataset.py"
-output=$(python3 "$python_script" $cypher_file_path $TGQL_cypher_file_path)
+#python_script="get_mgbench_tgql_dataset.py"
+#cypher_file_path="--cypher-file-path $mgbench_download_dir/cypher.cypher"
+#TGQL_cypher_file_path="--TGQL-cypher-file-path $mgbench_download_dir/TGQL.cypher"
+#python_script="get_mgbench_tqgl_dataset.py"
+#output=$(python3 "$python_script" $cypher_file_path $TGQL_cypher_file_path)
 
 #create graph operation
 #echo "Create graph operation query statements"
@@ -37,7 +37,7 @@ output=$(python3 "$python_script" $update_num_arg $dataset_path $write_path)
 #Create AeonG temporal database, get graph operation latency, and get space
 aeong_binary="--aeong-binary ../../build/memgraph"
 client_binary="--client-binary ../../build/tests/mgbench/client"
-number_workers="--num-workers 1"
+number_workers="--num-workers 20"
 rm -rf $prefix_path/database/aeong
 mkdir -p $prefix_path/database/aeong
 database_directory="--data-directory $prefix_path/database/aeong"
@@ -45,15 +45,15 @@ original_dataset="--original-dataset-cypher-path $mgbench_download_dir/cypher.cy
 index_path="--index-cypher-path $mgbench_download_dir/cypher_index.cypher"
 graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/cypher.txt"
 python_script="../scripts/create_temporal_database.py"
-echo "=============AeonG create database, it cost time==========="
-output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
-graph_op_latency=$(echo "$output" | awk '{print $1}')
-storage_consumption=$(echo "$output" | awk '{print $2}')
-start_time=$(echo "$output" | awk '{print $3}')
-end_time=$(echo "$output" | awk '{print $4}')
-echo "=============AeonG graph operation latency & spance==========="
-echo "graph_op_latency:$graph_op_latency"
-echo "storage_consumption:$storage_consumption"
+#echo "=============AeonG create database, it cost time==========="
+#output=$(python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $original_dataset $index_path $graph_op_cypher_path)
+#graph_op_latency=$(echo "$output" | awk '{print $1}')
+#storage_consumption=$(echo "$output" | awk '{print $2}')
+#start_time=$(echo "$output" | awk '{print $3}')
+#end_time=$(echo "$output" | awk '{print $4}')
+#echo "=============AeonG graph operation latency & spance==========="
+#echo "graph_op_latency:$graph_op_latency"
+#echo "storage_consumption:$storage_consumption"
 
 #Create ClockG temporal database, get graph operation latency, and get space"
 aeong_binary="--aeong-binary $clockg_binary"
@@ -94,7 +94,7 @@ echo "=============T-GQL graph operation latency & spance==========="
 echo "graph_op_latency:$graph_op_latency"
 echo "storage_consumption:$storage_consumption"
 
-if [ "$update_num" -eq 320000 ]; then
+if [ "$update_num" -eq 400000 ]; then
   echo "=============Various temporal query performance==========="
   prefix_path="../results/"
   op_num="--num-op $update_num"

@@ -70,6 +70,15 @@ gmark_dataset="
 --nodes ${save_dir}/${type}-a-${num}k/${type}-a-nodes.csv \
 --relationships ${save_dir}/${type}-a-${num}k/${type}-a-graph.csv"
 
+cd $build_dir
+make -j$(nproc) mg_import_csv
+
+#memgraph_snapshot_dir=${aeong_database_root}
+#cd ${memgraph_snapshot_dir}
+#echo "Converting CSV dataset to '${memgraph_snapshot_dir}'"
+#${build_dir}/src/mg_import_csv ${csv_dataset} --data-directory $memgraph_snapshot_dir/memgraph/ --delimiter "|" --array-delimiter ";"
+#echo "Finish building!"
+
 memgraph_snapshot_dir=${database_root}/aeong/${type}-a-${num}k
 echo ${memgraph_snapshot_dir}
 if [ -d "$memgraph_snapshot_dir" ]; then
