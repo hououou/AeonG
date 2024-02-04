@@ -146,7 +146,7 @@ if __name__ == "__main__":
     nodes.to_csv(args.directory + f"/{args.dbtype}-a-nodes.csv", index=False, sep='|')
     # generate the tgql-v gmark dataset
     ds.create_node(node_path,node_tgql_path)
-    ds.create_edge(relation,edge_tgql_path)
+    ds.create_edge(edge_path,edge_tgql_path)
 
     # generate the original gMark workload
     ds.read_files_in_dir(query_path)
