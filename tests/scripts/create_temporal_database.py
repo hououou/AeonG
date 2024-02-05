@@ -183,7 +183,7 @@ if __name__ == "__main__":
         else:
             client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
     else:
-        if args.benchmark_type == "mgbench":
+        if args.benchmark_type != "gmark":
             client.execute(file_path=args.original_dataset_cypher_path, num_workers=args.num_workers)
     # process graph operations to generate historical data
     start_time = int(time.time() * 1000000)
