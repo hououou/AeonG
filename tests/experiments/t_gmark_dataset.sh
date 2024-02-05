@@ -25,7 +25,7 @@ mkdir -p $clockg_database_root
 mkdir -p $tgql_database_root
 
 # HOW to use T-gMark
-replace some original gmark scripts with T-gMark versions
+# replace some original gmark scripts with T-gMark versions
 cd $test_dir
 rm -rf $test_dir/gmark
 git clone https://github.com/gbagan/gmark.git
@@ -120,7 +120,7 @@ do
   mkdir -p ${aeong_database}
   cd ${aeong_database}
   echo "Converting CSV dataset to '${aeong_database}'"
-  ${build_dir}/tools/src/mg_import_csv  --data-directory ${aeong_database} ${gmark_dataset} --delimiter "|" --array-delimiter ";"
+  ${build_dir}/src/mg_import_csv  --data-directory ${aeong_database} ${gmark_dataset} --delimiter "|" --array-delimiter ";"
 
   # # convert to gmark-clockg dataset
   clockg_database=${clockg_database_root}/${type}
