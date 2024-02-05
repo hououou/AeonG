@@ -1,13 +1,14 @@
+import os
 import argparse
 import  csv
 import pandas as pd
 
 class create_Dataset():
-    def label_id_process(str_id):
+    def label_id_process(self, str_id):
         str_id=str_id.split("_")[1]
         return str_id
 
-    def process_rdf_file(file_path):
+    def process_rdf_file(self, file_path):
         data = []  # 用于存储处理后的数据
         nodes_set = set()
         nodes = []
@@ -29,14 +30,14 @@ class create_Dataset():
         columns = df.columns.tolist()
         columns[1], columns[2] = columns[2], columns[1]
         df = df[columns]
-        df[':START_ID(NODE_ID)'] = df[':START_ID(NODE_ID)'].apply(label_id_process)
-        df[':END_ID(NODE_ID)'] = df[':END_ID(NODE_ID)'].apply(label_id_process)
+        df[':START_ID(NODE_ID)'] = df[':START_ID(NODE_ID)'].apply(self.label_id_process)
+        df[':END_ID(NODE_ID)'] = df[':END_ID(NODE_ID)'].apply(self.label_id_process)
         df_node = pd.DataFrame(nodes, columns=['id:ID(NODE_ID)', ':LABEL'])
         df_node['id:ID(NODE_ID)'] = df_node['id:ID(NODE_ID)'].astype(int)
         sorted_df = df_node.sort_values('id:ID(NODE_ID)')
         return df, sorted_df
     
-    def read_files_in_dir(directory):
+    def read_files_in_dir(self, directory):
         processed_dir = os.path.join(directory, "processed")
         if not os.path.exists(processed_dir):
             os.makedirs(processed_dir)
@@ -81,7 +82,7 @@ class create_Dataset():
                 name_value_info=f" Create (att2)-[:ATTRIBUTE_VALUE]->(:Value {{title:{node_id},validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) "
                 query_statement=node_info+id_info+id_value_info+name_info+name_value_info
                 write_lists.append(query_statement+";")
-        self.write_to_file(write_path+"tgql_node.txt",write_lists)
+        self.write_to_file(write_path+"/tgql_node.txt",write_lists)
 
     def create_edge(self,path,write_path):#node_type_from,node_type_to,
         write_lists=[]
@@ -102,7 +103,7 @@ class create_Dataset():
                 query_state1=f" Create (n)-[e:{edge_type}]->(m) set e.validTimeStart=timestamp(), e.validTimeEnd=9223372036854775000"
                 query_statement=query_state+query_state1
                 write_lists.append(query_statement+";")
-            self.write_to_file(write_path+"tgql_edge.txt",write_lists)
+            self.write_to_file(write_path+"/tgql_edge.txt",write_lists)
 
     def _gen_index(self):
         query1 = "CREATE INDEX ON :Object (title);\n"
@@ -138,10 +139,10 @@ if __name__ == "__main__":
     node_path=args.directory + f"/{args.dbtype}-a-nodes.csv"
     edge_path=args.directory + f"/{args.dbtype}-a-graph.csv"
     query_path=args.directory +"/query"
-    edge_tgql_path=args.directory
-    node_tgql_path=args.directory
+    edge_tgql_path=args.directory + "/tgql"
+    node_tgql_path=args.directory + "/tgql"
     # generate the original gmark dataset for property graph
-    df, nodes= ds.process_file(args.directory + f"/{args.dbtype}-a-graph.txt")
+    df, nodes= ds.process_rdf_file(args.directory + f"/{args.dbtype}-a-graph.txt")
     df.to_csv(args.directory + f"/{args.dbtype}-a-graph.csv", index=False, sep='|')
     nodes.to_csv(args.directory + f"/{args.dbtype}-a-nodes.csv", index=False, sep='|')
     # generate the tgql-v gmark dataset
