@@ -127,12 +127,12 @@ We provide scripts based on our benchmark generation tools and test tools to com
 * For Figure 8(c) and 9(e), use the following script to test the LDBC workload. Note that the LDBC workload is substantial and will take a considerable amount of time.
 
       cd tests/experiments
-      ./t_LDBC_test.sh $clockg_binary $memgraph_binary
+      ./t_ldbc_test.sh $clockg_binary $memgraph_binary
 
 * For Figure 8(d) and 9(f), use the following script.
 
       cd tests/experiments
-      ./t_gMark_test.sh $clockg_binary $memgraph_binary
+      ./t_gmark_test.sh $clockg_binary $memgraph_binary
 
 #### Performance Analysis on AeonG
 To assess the performance of AeonG, please follow the steps outlined below.
