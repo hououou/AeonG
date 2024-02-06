@@ -141,7 +141,7 @@ class gMark():
         tgql_query=f"Create (n:Object {{ title:'Node',id:{self._id_to_be},validTimeStart:timestamp(),validTimeEnd:9223372036854775000 }}) Create (n)-[:OBJECT_ATTRIBUTE]->(att:Attribute {{title:'id',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})  Create (att)-[:ATTRIBUTE_VALUE]->(:Value {{title:0,validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})  Create (n)-[:OBJECT_ATTRIBUTE]->(att2:Attribute {{title:'name',validTimeStart:timestamp(),validTimeEnd:9223372036854775000}})  Create (att2)-[:ATTRIBUTE_VALUE]->(:Value {{title:0,validTimeStart:timestamp(),validTimeEnd:9223372036854775000}}) ;"
         return query,tgql_query
     def add_edge(self,from_node, edge_type, to_node):
-        query=f"MATCH (n1 {{id:{from_node}}}),(n2 {{id:{to_node}}}) with n1, n2 Create (n1)-[:{edge_type}]-(n2);"
+        query=f"MATCH (n1 {{id:{from_node}}}),(n2 {{id:{to_node}}}) with n1, n2 Create (n1)-[:{edge_type}]->(n2);"
         tgql_query=f"MATCH (o1:Object)-[o:OBJECT_ATTRIBUTE]-(att {{title:'id'}})-[a:ATTRIBUTE_VALUE]-(v {{title:{from_node}}}),(o2:Object)-[:OBJECT_ATTRIBUTE]-(att2 {{title:'id'}})-[a2:ATTRIBUTE_VALUE]-(v2 {{title:{to_node}}}) with o1, o2 Create (o1)-[:edge_type]-(o2);"
         return query,tgql_query
 

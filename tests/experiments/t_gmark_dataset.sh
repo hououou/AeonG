@@ -3,8 +3,9 @@ update_num=320000
 nodes=100000
 type="test"
 schema_types=("test" "shop" "social" "uniprot")
-clockg_binary=$1 #/home/hjm/vldb/clockg/build/memgraph
-memgraph_binary=$2 #/home/hjm/vldb/memgraph-master/build/memgraph
+schema_types=("test")
+clockg_binary=$1
+memgraph_binary=$2
 
 temp_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 base_dir="$( cd ../.. "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -13,7 +14,7 @@ build_dir="${base_dir}/build"
 test_dir="${base_dir}/tests"
 dataset_root="${test_dir}/datasets/T-gMark"
 result_dir="$test_dir/results"
-gmark_dir="$test_dir/gmark"
+gmark_dir="$test_dir/results/gmark"
 scripts_dir="$test_dir/scripts"
 database_root="$test_dir/results/database"
 aeong_database_root="${database_root}/gmark/aeong"
@@ -26,17 +27,17 @@ mkdir -p $tgql_database_root
 
 # HOW to use T-gMark
 # replace some original gmark scripts with T-gMark versions
-cd $test_dir
-rm -rf $test_dir/gmark
+cd $test_dir/results
+rm -rf $test_dir/results/gmark
 git clone https://github.com/gbagan/gmark.git
-rm -rf $test_dir/gmark/use-cases/*
-cp -r $test_dir/experiments/gmark-use-cases/* $test_dir/gmark/use-cases/
+rm -rf $test_dir/results/gmark/use-cases/*
+cp -r $test_dir/experiments/gmark-use-cases/* $test_dir/results/gmark/use-cases/
 
 # To compile the code:
 cd ${gmark_dir}/demo/scripts
 ./compile-all.sh
-
-# clear the dataset directory
+#
+## clear the dataset directory
 save_dir="$dataset_root"
 rm -rf ${save_dir}/*
 
@@ -85,12 +86,20 @@ do
   args_3="--number $num"
   output=$(python3 "$python_script" $args_1 $args_2 $args_3)
 
+  # create index
+  echo "create index"
+  rm -rf ${save_dir}/gmark_index.cypher
+  rm -rf ${save_dir}/gmark_tgql_index.cypher
+  echo "CREATE INDEX ON :Node(id)" >> ${save_dir}/gmark_index.cypher
+  echo "CREATE INDEX ON :Object (title);" >> ${save_dir}/gmark_tgql_index.cypher
+  echo "CREATE INDEX ON :Attribute(title);" >> ${save_dir}/gmark_tgql_index.cypher
+  echo "CREATE INDEX ON :Value(title);" >> ${save_dir}/gmark_tgql_index.cypher
+
   #create graph operation
   echo "Create graph operation query statements"
   prefix_path="$base_dir/tests/results/T-gMark/${type}/"
   graph_op_path="${prefix_path}graph_op/"
   peak_vertices_path="${prefix_path}peak_vertices/"
-  echo $graph_op_path
   rm -rf $graph_op_path
   mkdir -p $graph_op_path
   rm -rf $peak_vertices_path
@@ -100,7 +109,6 @@ do
   dataset_path="--gmark-dataset-path ${dataset_root}/${type}-a-${num}k/${type}-a-nodes.csv"
   python_script="${test_dir}/benchmarks/T-gMark/create_graph_op_queries.py"
   output=$(python3 $python_script $update_num_arg $dataset_path $write_path)
-  echo "$output"
 
   # generate the original T-gMark database
   gmark_dataset="
@@ -110,6 +118,7 @@ do
   cd $build_dir
   make -j$(nproc) mg_import_csv
 
+  echo "AeonG & ClockG create origin database and get storage consumption"
   echo ${aeong_database_root}
   aeong_database=${aeong_database_root}/${type}
   if [ -d "$aeong_database" ]; then
@@ -122,12 +131,13 @@ do
   echo "Converting CSV dataset to '${aeong_database}'"
   ${build_dir}/src/mg_import_csv  --data-directory ${aeong_database} ${gmark_dataset} --delimiter "|" --array-delimiter ";"
 
-  # # convert to gmark-clockg dataset
+   # convert to gmark-clockg dataset
   clockg_database=${clockg_database_root}/${type}
+  rm -rf ${clockg_database_root}/${type}
   mkdir -p ${clockg_database_root}/${type}
-  cp -r ${aeong_database}/* ${clockg_database}/
+  cp -r ${aeong_database} ${clockg_database}/
 
-  # #Create AeonG temporal database, get graph operation latency, and get space
+   #Create AeonG temporal database, get graph operation latency, and get space
   cd $scripts_dir
   aeong_binary="--aeong-binary ${build_dir}/memgraph"
   client_binary="--client-binary ${build_dir}/tests/mgbench/client"
@@ -146,7 +156,7 @@ do
   echo "=============AeonG graph operation latency & spance==========="
   echo "graph_op_latency:$graph_op_latency"
   echo "storage_consumption:$storage_consumption"
-
+#
   #Create ClockG temporal database, get graph operation latency, and get space"
   aeong_binary="--aeong-binary $clockg_binary"
   clockg_snapshot="--clockg-snapshot 80000"
@@ -168,6 +178,7 @@ do
   aeong_binary="--aeong-binary $memgraph_binary"
   database_directory="--data-directory $tgql_database"
   rm -rf $tgql_database
+  mkdir -p $tgql_database
   index_path="--index-cypher-path $dataset_root/gmark_tgql_index.cypher"
   original_dataset_path="--original-dataset-cypher-path $dataset_dir/tgql"
   graph_op_cypher_path="--graph-operation-cypher-path $graph_op_path/TGQL_cypher.txt"
@@ -176,7 +187,6 @@ do
   benchamrk_type="--benchmark-type gmark"
   python_script="${scripts_dir}/create_temporal_database.py"
   echo "=============T-GQL create database, it cost time==========="
-  # python3 "$python_script" $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $index_path $load_tgql_type $benchamrk_type $original_dataset_path
   output=$(python3 $python_script $aeong_binary $client_binary $binary_type $number_workers $graph_op_cypher_path $database_directory $index_path $load_tgql_type $benchamrk_type $original_dataset_path)
   graph_op_latency=$(echo "$output" | awk '{print $1}')
   storage_consumption=$(echo "$output" | awk '{print $2}')
@@ -203,28 +213,38 @@ do
 
   aeong_binary="--aeong-binary ${build_dir}/memgraph"
   client_binary="--client-binary ${build_dir}/tests/mgbench/client"
-  number_workers="--num-workers 20"
+  number_workers="--num-workers 1"
   database_directory="--data-directory $aeong_database"
   index_path="--index-cypher-path $dataset_root/gmark_index.cypher"
-  python_script="${scripts_dir}/evaluate_temporal_q.py"
-  temporal_q1="--temporal-query-cypher-path $write_path/temporal_query/cypher.txt"
+  python_script=${scripts_dir}/evaluate_temporal_q.py
+  temporal_path="--temporal-query-cypher-path $prefix_path/T-gMark/${type}/temporal_query/cypher.txt"
+  echo $tempoal_path
+  echo "AeonG query:"
+  echo $database_directory
+  echo $python_script
+  echo $aeong_binary $tempoal_path $client_binary $number_workers $database_directory $index_path
+  python3 $python_script $aeong_binary $tempoal_path $client_binary $number_workers $database_directory $index_path
 
-  echo "AeonG q1"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
-
-  echo "Evaluate Clock-G temporal database, get temporal query latency,"
+#  echo "Evaluate Clock-G temporal database, get temporal query latency,"
   aeong_binary="--aeong-binary $clockg_binary"
   binary_type="--binary-type clockg"
-  echo "Clock-G q1"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
+  database_directory="--data-directory $clockg_database"
+  echo "Clock-G query:"
+  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $tempoal_path $binary_type
 
   echo "Evaluate T-GQL temporal database, get temporal query latency,"
   aeong_binary="--aeong-binary $memgraph_binary"
+  start_time=0
+  end_time=1
   min_time="--min-time $start_time"
   max_time="--max-time $end_time"
+  binary_type="--binary-type tgql"
   python_script="${test_dir}/benchmarks/T-gMark/create_temporal_query.py"
-  output=$(python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path)
-  temporal_q1="--temporal-query-cypher-path $write_path/temporal_query/TGQL_cypher.txt"
-  echo "T-GQL q1"
-  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q1
+  index_path="--index-cypher-path $dataset_root/gmark_tgql_index.cypher"
+  python3 "$python_script" $op_num $min_time $max_time $frequency_type $write_path $gmark_query_path
+  temporal_q_path="--temporal-query-cypher-path $prefix_path/T-gMark/${type}/temporal_query/TGQL_cypher.txt"
+  echo "T-GQL query:"
+  database_directory="--data-directory $tgql_database"
+  python_script=${scripts_dir}/evaluate_temporal_q.py
+  python3 "$python_script" $aeong_binary $client_binary $number_workers $database_directory $index_path $temporal_q_path $binary_type
 done
