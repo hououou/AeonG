@@ -80,7 +80,6 @@ class LDBC():
     def _get_random_time(self,min_t,max_t):
         return random.randint(min_t, max_t)
 
-
     #read
     def IS1(self,person_id,min,max):
         ts=self._get_random_time(min,max)
@@ -313,31 +312,31 @@ class LDBC():
         is_function = is_functions.get(is_idx)
         return is_function(id, min, max)
 
-def IS_queries(self,file_path,is_idx,min,max):
-    query_type="mix"
-    query_id_path=file_path.replace("count",f"{query_type}_ids")
-    vid_lists=[]
-    if self.exist_file(query_id_path):
-        print("vid_lists",len(vid_lists))
-        vid_lists=self.read_from_file(query_id_path)
-    else:
-        print("vid_lists",len(vid_lists))
-        vid_lists=self._get_vertex_list(file_path,query_type)
-        self.write_to_file(query_id_path,vid_lists)
-    num=0
-    cypher_lists=[]
-    tgql_cypher_lists=[]
-    while (True):
-        for vid in vid_lists:
-            cypher_query,tgql_cypher_query=self.IS(vid,min,max,is_idx)
-            cypher_lists.append(cypher_query)
-            tgql_cypher_lists.append(tgql_cypher_lists)
-            num+=1
+    def IS_queries(self,file_path,is_idx,min,max):
+        query_type="mix"
+        query_id_path=file_path.replace("count",f"{query_type}_ids")
+        vid_lists=[]
+        if self.exist_file(query_id_path):
+            print("vid_lists",len(vid_lists))
+            vid_lists=self.read_from_file(query_id_path)
+        else:
+            print("vid_lists",len(vid_lists))
+            vid_lists=self._get_vertex_list(file_path,query_type)
+            self.write_to_file(query_id_path,vid_lists)
+        num=0
+        cypher_lists=[]
+        tgql_cypher_lists=[]
+        while (True):
+            for vid in vid_lists:
+                cypher_query,tgql_cypher_query=self.IS(vid,min,max,is_idx)
+                cypher_lists.append(cypher_query)
+                tgql_cypher_lists.append(tgql_cypher_lists)
+                num+=1
+                if(num>=100):
+                    break
             if(num>=100):
                 break
-        if(num>=100):
-            break
-    return cypher_lists,tgql_cypher_lists
+        return cypher_lists,tgql_cypher_lists
 
 if __name__ == "__main__":
     # Parse options.
@@ -345,18 +344,18 @@ if __name__ == "__main__":
         description="AeonG create graph operation queries.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--size",
-                        default="small",
+                        default="sf0.1",
                         help="Dataset size")
-    parser.add_argument("--num-op",
+    parser.add_argument("--num-op",type=int,
                         default=80000,
                         help="The number of graph operation queries")
     parser.add_argument("--write-path",
                         default="../../results/",
                         help="The write path of reults")
-    parser.add_argument("--max-time",
+    parser.add_argument("--max-time", type=int,
                         default=100,
                         help="Max time of the datasets life")
-    parser.add_argument("--min-time",
+    parser.add_argument("--min-time", type=int,
                         default=0,
                         help="Min time of the datasets life")
 
@@ -372,7 +371,7 @@ if __name__ == "__main__":
         peak_vertices_path=f"{args.write_path}/peak_vertices/update_{peak_types[index]}_Num{ldbc._max_graph_op}_update_count.csv"
         write_path=f"{args.write_path}/temporal_query/IS"+str(index)+"/"
         #q1
-        cypher_lists,tgql_cypher_lists=ldbc.IS_queries(peak_vertices_path,index,args.min,args.max)
+        cypher_lists,tgql_cypher_lists=ldbc.IS_queries(peak_vertices_path,index,args.min_time,args.max_time)
         ldbc.write_to_file(f"{args.write_path}/temporal_query/IS{index}_cypher.txt",cypher_lists)
         ldbc.write_to_file(f"{args.write_path}/temporal_query/IS{index}_TGQL_cypher.txt",tgql_cypher_lists)
     print("=========done!========")

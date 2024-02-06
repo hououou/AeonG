@@ -12,7 +12,11 @@ Our original datasets for each workload are as follows.
   * [sf0.1](https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/ldbc/benchmark/interactive/ldbc_interactive_sf0.1.cypher.gz): vertices 327,588 edges 1,477,965
   * [sf1](https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/ldbc/benchmark/interactive/ldbc_interactive_sf1.cypher.gz) (AeonG's choice): vertices 3,181,724, edges 17,256,038
   * [sf3](https://s3.eu-west-1.amazonaws.com/deps.memgraph.io/dataset/ldbc/benchmark/interactive/ldbc_interactive_sf3.cypher.gz): vertices 9,281,922, edges 52,695,735
-* gMark: For g-Mark, we use its [open-source codes](https://github.com/gbagan/gmark) to generate graph.
+* gMark: For g-Mark, we use its [open-source codes](https://github.com/gbagan/gmark) to generate graph. In our experiments, we relied on four use cases: the default gMark use case, and three gMark encodings of the schemas of existing state-of-the-art benchmarks. For each graph, we generate a raw dataset of 100K nodes and perform 320K update operations on each graph.
+  * **Bib**: is gMarks' default scenario, describing the bibliographical database.
+  * **LSN**: is gMark encoding of the fixed schema provided with the LDBC Social Network Benchmark, which simulates user activity in a social network.
+  * **SP**: is gMark encoding of the fixed DBLP-based schema provided with SP2Bench.
+  * **WD**: is gMark encoding of the default schema provided with Waterloo SPARQL Diversity Test Suite (WatDiv).
 
 
 ## Generate temporal data

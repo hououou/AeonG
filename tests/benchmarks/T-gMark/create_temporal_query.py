@@ -101,14 +101,14 @@ if __name__ == "__main__":
     parser.add_argument("--write-path",
                         default="../../results/",
                         help="The write path of reults")
-    parser.add_argument("--max-time",
+    parser.add_argument("--max-time", type=int,
                         default=100,
                         help="Max time of the datasets life")
-    parser.add_argument("--min-time",
+    parser.add_argument("--min-time", type=int,
                         default=0,
                         help="Min time of the datasets life")
     parser.add_argument("--query-size",
-                        default=0,
+                        default=5,
                         help="Original gmark query sizes")
     parser.add_argument("--gmark-query-path",
                         default="/data/hjm/gMark/vldb_version/schemas/datasets/bib/bib-a-100k/query-limit/processed",

@@ -11,6 +11,7 @@ ve3/
 perf.data*
 TAGS
 *.apollo_measurements
+libs
 
 # Lisp compiled object code
 *.fas
