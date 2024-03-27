@@ -160,6 +160,23 @@ import_external_library(rocksdb STATIC
              -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=true
   BUILD_COMMAND $(MAKE) rocksdb)
 
+
+# Setup RocksDB cloud 
+# add_definitions(-DUSE_AWS=1)
+# add_compile_definitions(DUSE_AWS=1)
+# export USE_AWS=1
+# import_external_library(rocksdb-cloud STATIC
+# ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb-cloud/lib/librocksdb.a
+# ${CMAKE_CURRENT_SOURCE_DIR}/rocksdb-cloud/include
+# CMAKE_ARGS -DUSE_RTTI=ON
+#            -DWITH_TESTS=OFF
+#            -DGFLAGS_NOTHREADS=OFF
+#            -DCMAKE_INSTALL_LIBDIR=lib
+#            -DCMAKE_SKIP_INSTALL_ALL_DEPENDENCY=true
+#            -DROCKSDB_BUILD_SHARED=OFF
+
+# BUILD_COMMAND $(MAKE) rocksdb)
+
 # Setup libbcrypt
 import_external_library(libbcrypt STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libbcrypt/bcrypt.a

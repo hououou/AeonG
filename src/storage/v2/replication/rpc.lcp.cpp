@@ -3,7 +3,7 @@
 // DO NOT EDIT! Generated using LCP from
 // '/home/hjm/vldb/memgraph/src/storage/v2/replication/rpc.lcp'
 
-#include "/home/hjm/vldb/memgraph/src/storage/v2/replication/rpc.hpp"
+#include "/home/aeong/src/storage/v2/replication/rpc.hpp"
 
 namespace storage {
 
